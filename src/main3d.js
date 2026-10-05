@@ -28,6 +28,10 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 50
 
 createWorld(scene);
 const tank = new Tank(scene);
+// GLB-модель танка; при ошибке загрузки остаётся процедурная заглушка
+tank.attachModel("assets/models/Tank.glb").catch((err) =>
+  console.warn("Модель танка не загрузилась:", err)
+);
 const rig = new CameraRig(camera);
 const gun = new Gun(scene, rig);
 
