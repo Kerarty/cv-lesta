@@ -77,9 +77,16 @@
   </div>
 
   <script>
-    // Ловим ошибки загрузки/инициализации для диагностики
+    // Ловим ошибки загрузки/инициализации для диагностики (с точным стеком)
     window.__jsErrors = [];
-    addEventListener("error", (e) => window.__jsErrors.push(String(e.message)));
+    addEventListener("error", (e) => {
+      const err = e.error || e;
+      window.__jsErrors.push((err.stack || err.message || String(err)).slice(0, 500));
+    });
+    addEventListener("unhandledrejection", (e) => {
+      const r = e.reason || {};
+      window.__jsErrors.push("REJECTION: " + (r.stack || r.message || String(r)).slice(0, 500));
+    });
   </script>
   <script src="src/config.js"></script>
   <script src="src/balance.js"></script>

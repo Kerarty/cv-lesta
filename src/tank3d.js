@@ -8,6 +8,40 @@ function shortestAngle(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
 }
 
+// Режет геометрию по горизонтали: возвращает над-cut (башня) и под-cut (корпус).
+// Переносит ВСЕ атрибуты вершин (позиции, нормали, skinIndex/skinWeight — без них
+// скиннинг упадёт), с сохранением исходных типов массивов.
+function splitByHeight(geo, cutY) {
+  const pos = geo.attributes.position;
+  const idx = geo.index;
+  const triCount = (idx ? idx.count : pos.count) / 3;
+  const attrs = Object.entries(geo.attributes);
+  const above = {}, below = {};
+
+  for (let t = 0; t < triCount; t++) {
+    const vis = [idx ? idx.getX(t * 3) : t * 3, idx ? idx.getX(t * 3 + 1) : t * 3 + 1, idx ? idx.getX(t * 3 + 2) : t * 3 + 2];
+    const isAbove = vis.every((vi) => pos.getY(vi) > cutY);
+    const T = isAbove ? above : below;
+    for (const vi of vis) {
+      for (const [name, attr] of attrs) {
+        const arr = T[name] || (T[name] = []);
+        for (let k = 0; k < attr.itemSize; k++) arr.push(attr.array[vi * attr.itemSize + k]);
+      }
+    }
+  }
+  const make = (T) => {
+    if (!T.position) return null;
+    const g = new THREE.BufferGeometry();
+    for (const [name, arr] of Object.entries(T)) {
+      const src = geo.attributes[name];
+      g.setAttribute(name, new THREE.BufferAttribute(new src.array.constructor(arr), src.itemSize, src.normalized));
+    }
+    if (!g.attributes.normal) g.computeVertexNormals();
+    return g;
+  };
+  return { above: make(above), below: make(below) };
+}
+
 export class Tank {
   constructor(scene) {
     this.group = new THREE.Group();
@@ -75,10 +109,37 @@ export class Tank {
     this._turretZ0 = this.turret.position.z;
     this.turret.attach(gun);
 
-    // Купол башни (примитив Cube009) — на тот же привод: башня вращается вместе со стволом.
-    // Остальное верхнее строение в модели слито с корпусом и остаётся неподвижным.
+    // Купол башни (примитив Cube009) — на тот же привод
     const dome = body?.children.find((c) => c.name === "Cube009");
     if (dome) this.turret.attach(dome);
+
+    // ПОЛНАЯ башня: верхнее строение в модели слито с корпусом — вырезаем
+    // треугольники выше палубы и сажаем на привод; корпусу оставляем остальное
+    // (иначе башня рисовалась бы дважды: статичной и вращающейся)
+    this._turretParts = [];
+    for (const name of ["Cube009_1", "Cube009_2"]) {
+      const src = body?.children.find((c) => c.name === name);
+      if (!src) continue;
+      const { above, below } = splitByHeight(src.geometry, 4.65);
+      if (above) {
+        // Кусок делаем SkinnedMesh с тем же скелетом и bind-матрицами —
+        // иначе скинненный рендер-трансформ не совпадёт и кусок уедет на землю
+        const part = new THREE.SkinnedMesh(above, src.material);
+        part.skeleton = src.skeleton;
+        part.bindMatrix.copy(src.bindMatrix);
+        part.bindMatrixInverse.copy(src.bindMatrixInverse);
+        part.bindMode = src.bindMode;
+        part.castShadow = true;
+        part.frustumCulled = false;
+        part.matrixWorld.copy(src.matrixWorld);
+        this.turret.attach(part);
+        this._turretParts.push(part);
+      }
+      if (below) {
+        src.geometry.dispose();
+        src.geometry = below;
+      }
+    }
 
     // Дуло — ребёнок узла ствола: кончик по геометрии, гарантированно едет с танком
     let gunMesh = null;
@@ -100,6 +161,8 @@ export class Tank {
     for (const c of body.children) {
       if (tints[c.name] !== undefined) this._paint(c, tints[c.name]);
     }
+    for (const p of this._turretParts) this._paint(p, tints.Cube009_1);
+    if (dome) this._paint(dome, tints.Cube009);
     model.traverse((o) => {
       if (o.name === "TrackMeshL" || o.name === "TrackMeshR") this._paint(o, 0x3a3a34);
     });
