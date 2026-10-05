@@ -44,6 +44,10 @@ const targets = targetsMgr.items;
 let xp = 0;
 let destroyed = 0;
 let battleStart = 0; // момент первого взятия управления
+let shotsFired = 0;
+let shotsHit = 0;
+let damageDealt = 0;
+let mode = BALANCE.defaultMode;
 const totalTargets = BALANCE.targets.length;
 const xpEl = document.getElementById("xp");
 const objEl = document.getElementById("objCounter");
@@ -94,17 +98,22 @@ function contactsHtml() {
   );
 }
 
-function showEnd(mode) {
+function showEnd(mode_) {
   document.exitPointerLock?.();
   input.firing = false;
   const secs = battleStart ? Math.round((performance.now() - battleStart) / 1000) : 0;
   const mm = Math.floor(secs / 60);
   const ss = String(secs % 60).padStart(2, "0");
-  document.getElementById("endTitle").textContent = mode === "victory" ? "ПОБЕДА!" : "Контакты";
-  document.getElementById("endStats").textContent = mode === "victory"
-    ? `Винрейт 100% · Опыт +${xp} · Время боя ${mm}:${ss}`
+  const acc = shotsFired ? Math.round((shotsHit / shotsFired) * 100) : 100;
+  document.getElementById("endTitle").textContent = mode_ === "victory" ? "ПОБЕДА!" : "Контакты";
+  document.getElementById("endStats").innerHTML = mode_ === "victory"
+    ? `Винрейт 100% · Опыт +${xp} · Время боя ${mm}:${ss}<br>` +
+      `Точность ${acc}% · Урон ${damageDealt} · Знание баланса: 100%`
     : `Винрейт ещё не заработан · Опыт +${xp}`;
   document.getElementById("endContacts").innerHTML = contactsHtml();
+  document.getElementById("endSign").textContent = mode_ === "victory"
+    ? `Готов балансить ваши танки — ${RESUME.name} (${RESUME.role})`
+    : RESUME.role;
   endScreen.classList.add("show");
 }
 document.getElementById("backBtn").addEventListener("click", () => {
@@ -113,8 +122,28 @@ document.getElementById("backBtn").addEventListener("click", () => {
 });
 document.getElementById("contactsBtn").addEventListener("click", () => showEnd("contacts"));
 
+// Патч-ноты в ангаре: ченджлог баланса из balance.js
+document.getElementById("patchNotes").innerHTML = BALANCE.patchNotes
+  .map((n) => `<div class="pn-row"><span class="pn-v">${n.v}</span> — ${n.text}</div>`)
+  .join("");
+
+// Режимы HR / Геймдизайнер: перезарядка и авто-наведение
+function setMode(m) {
+  mode = m;
+  BALANCE.tank.reload = BALANCE.modes[m].reload;
+  document.querySelectorAll(".mode").forEach((b) =>
+    b.classList.toggle("active", b.dataset.mode === m)
+  );
+}
+document.querySelectorAll(".mode").forEach((b) =>
+  b.addEventListener("click", () => setMode(b.dataset.mode))
+);
+setMode(BALANCE.defaultMode);
+
 function applyDamage(t, dmg) {
   if (t.dead) return;
+  shotsHit++;
+  damageDealt += Math.min(dmg, t.hp);
   t.hp -= dmg;
   t.flash();
   t.updateBar();
@@ -172,7 +201,8 @@ addEventListener("mousemove", (e) => {
 
 // Pointer lock с fallback: если браузер не дал захват мыши — вращаем камеру с зажатой ЛКМ
 let dragMode = false;
-overlay.addEventListener("click", () => {
+function startBattle() {
+  endScreen.classList.remove("show");
   try {
     const p = canvas.requestPointerLock();
     if (p && p.catch) p.catch(() => enableDragMode());
@@ -180,7 +210,8 @@ overlay.addEventListener("click", () => {
     enableDragMode();
   }
   setTimeout(() => { if (!document.pointerLockElement) enableDragMode(); }, 400);
-});
+}
+document.getElementById("battleBtn").addEventListener("click", startBattle);
 function enableDragMode() {
   dragMode = true;
   overlay.classList.add("hidden");
@@ -219,9 +250,27 @@ renderer.setAnimationLoop(() => {
 
   tank.update(dt, input);
   rig.update(dt, tank.group.position);
-  tank.aimToward(rig.facingYaw(), dt);
+  // Наведение: в режиме HR башня сама доворачивается на цель вблизи прицела
+  let aimYaw = rig.facingYaw();
+  let aimPoint = null;
+  if (BALANCE.modes[mode].autoAim) {
+    let bestDiff = 0.9; // конус захвата ~50°
+    for (const t of targets) {
+      const dx = t.pos.x - tank.group.position.x;
+      const dz = t.pos.z - tank.group.position.z;
+      if (Math.hypot(dx, dz) > 90) continue;
+      const yawToTarget = Math.atan2(dx, dz);
+      const diff = Math.atan2(Math.sin(yawToTarget - aimYaw), Math.cos(yawToTarget - aimYaw));
+      if (Math.abs(diff) < bestDiff) {
+        bestDiff = Math.abs(diff);
+        aimYaw = yawToTarget;
+        aimPoint = t.pos.clone().setY(t.radius * 1.5);
+      }
+    }
+  }
+  tank.aimToward(aimYaw, dt);
 
-  if (input.firing) gun.tryFire(now, camera, tank);
+  if (input.firing && gun.tryFire(now, camera, tank, aimPoint)) shotsFired++;
   gun.update(now, dt, targets);
   targetsMgr.update(dt, now / 1000);
 

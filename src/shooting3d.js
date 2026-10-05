@@ -46,11 +46,13 @@ export class Gun {
     return this._aim;
   }
 
-  tryFire(now, camera, tank) {
+  tryFire(now, camera, tank, aimTarget) {
     if (now < this.reloadUntil) return false;
     this.reloadUntil = now + BALANCE.tank.reload * 1000;
 
-    const aim = this.aimPoint(camera);
+    // В режиме HR сюда приходит центр цели — снаряд идёт точно в кристалл.
+    // Иначе — честная точка под перекрестьем.
+    const aim = aimTarget ? this._aim.copy(aimTarget) : this.aimPoint(camera);
     const muzzle = tank.muzzleWorldPos(this._muzzle);
 
     // Снаряд летит строго вдоль ствола (v0.8): горизонталь — привод башни,
