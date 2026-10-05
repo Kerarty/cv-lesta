@@ -1,6 +1,7 @@
-// Стрельба: снаряды, попадания, взрывы, вспышки.
-// Прицел честный: снаряд летит в точку под перекрестьем, трассер виден (60 м/с — см. balance.js).
+// Стрельба: трассеры, вспышки, дым, куски земли, воронки.
+// Прицел честный: снаряд летит в точку под перекрестьем (60 м/с — см. balance.js).
 import * as THREE from "three";
+import { Puffs } from "./effects3d.js";
 
 export class Gun {
   constructor(scene, cameraRig) {
@@ -11,21 +12,34 @@ export class Gun {
     this.scorches = [];
     this.reloadUntil = 0;
 
-    this.shellGeo = new THREE.SphereGeometry(0.13, 8, 6);
-    this.shellMat = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+    // Трассер: вытянутая капсула, ориентированная по вектору скорости
+    this.shellGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.85, 6);
+    this.shellMat = new THREE.MeshBasicMaterial({ color: 0xffd98a });
+
+    // Дым (взрывы и выстрелы)
+    this.smoke = new Puffs(scene, {
+      inner: "rgba(110,100,88,0.85)",
+      outer: "rgba(110,100,88,0)",
+    });
+
+    // Куски земли
+    this.chunkGeo = new THREE.TetrahedronGeometry(0.16);
+    this.chunkMat = new THREE.MeshStandardMaterial({
+      color: 0x3d3325, roughness: 1, flatShading: true, transparent: true,
+    });
 
     this._ray = new THREE.Raycaster();
     this._plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     this._aim = new THREE.Vector3();
     this._dir = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
+    this._up = new THREE.Vector3(0, 1, 0);
   }
 
   // Точка на земле под перекрестьем
   aimPoint(camera) {
     this._ray.setFromCamera({ x: 0, y: 0 }, camera);
     if (!this._ray.ray.intersectPlane(this._plane, this._aim)) {
-      // смотрим выше горизонта — цель «на горизонте»
       this._ray.ray.at(300, this._aim);
       this._aim.y = 0;
     }
@@ -42,6 +56,7 @@ export class Gun {
 
     const shell = new THREE.Mesh(this.shellGeo, this.shellMat);
     shell.position.copy(muzzle);
+    shell.quaternion.setFromUnitVectors(this._up, dir);
     this.scene.add(shell);
     this.shells.push({
       mesh: shell,
@@ -49,32 +64,66 @@ export class Gun {
       born: now,
     });
 
-    // Вспышка у среза ствола
+    // Вспышка светом + клуб дыма + отдача и FOV-толчок
     const light = new THREE.PointLight(0xffc873, 60, 14, 2);
     light.position.copy(muzzle);
     this.scene.add(light);
-    this.effects.push({ light, t: 0, kind: "flash" });
-
+    this.effects.push({ kind: "flash", light, t: 0, life: 0.08 });
+    this.smoke.spawn(muzzle, { scale: 0.5, growth: 0.9, life: 0.5, rise: 0.9, opacity: 0.4 });
     tank.recoil = 0.12;
+    this.rig.kick(2.5);
     return true;
   }
 
   explode(pos, scale = 1) {
+    // Вспышка-сфера
     const flash = new THREE.Mesh(
       new THREE.SphereGeometry(0.45 * scale, 10, 8),
       new THREE.MeshBasicMaterial({ color: 0xffc873, transparent: true, opacity: 0.95 })
     );
     flash.position.copy(pos);
+    this.scene.add(flash);
+    this.effects.push({ kind: "boom", flash, t: 0, life: 0.3 });
 
+    // Дым: несколько клубов, поднимаются и расплываются
+    for (let i = 0; i < 5; i++) {
+      const p = pos.clone().add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.6, Math.random() * 0.3, (Math.random() - 0.5) * 0.6
+      ));
+      this.smoke.spawn(p, {
+        scale: 0.8 * scale + Math.random() * 0.5,
+        growth: 1.3,
+        life: 1.0 + Math.random() * 0.5,
+        rise: 1.4 + Math.random() * 0.6,
+        opacity: 0.55,
+      });
+    }
+
+    // Куски земли веером
+    for (let i = 0; i < 8; i++) {
+      const chunk = new THREE.Mesh(this.chunkGeo, this.chunkMat.clone());
+      chunk.position.copy(pos);
+      chunk.position.y = Math.max(pos.y, 0.1);
+      this.scene.add(chunk);
+      const a = Math.random() * Math.PI * 2;
+      this.effects.push({
+        kind: "chunk",
+        mesh: chunk,
+        vel: new THREE.Vector3(Math.cos(a) * (1.5 + Math.random() * 3), 3.5 + Math.random() * 3.5, Math.sin(a) * (1.5 + Math.random() * 3)),
+        spin: new THREE.Vector3(Math.random() * 10, Math.random() * 10, Math.random() * 10),
+        t: 0,
+        life: 1.6,
+      });
+    }
+
+    // Воронка-подпалина
     const scorch = new THREE.Mesh(
       new THREE.CircleGeometry(1.3 * scale, 16),
       new THREE.MeshBasicMaterial({ color: 0x1a140c, transparent: true, opacity: 0.4 })
     );
     scorch.rotation.x = -Math.PI / 2;
     scorch.position.set(pos.x, 0.03, pos.z);
-
-    this.scene.add(flash, scorch);
-    this.effects.push({ flash, t: 0, kind: "boom" });
+    this.scene.add(scorch);
     this.scorches.push(scorch);
     if (this.scorches.length > 40) {
       const old = this.scorches.shift();
@@ -108,7 +157,7 @@ export class Gun {
           }
         }
       }
-      if (!dead && now - s.born > 4000) dead = true; // улетел в туман
+      if (!dead && now - s.born > 4000) dead = true;
 
       if (dead) {
         this.scene.remove(s.mesh);
@@ -119,14 +168,15 @@ export class Gun {
     // Эффекты
     for (let i = this.effects.length - 1; i >= 0; i--) {
       const e = this.effects[i];
-      e.t += dt / (e.kind === "flash" ? 0.08 : 0.35);
+      e.t += dt / e.life;
+
       if (e.kind === "flash") {
         e.light.intensity = 60 * Math.max(0, 1 - e.t);
         if (e.t >= 1) {
           this.scene.remove(e.light);
           this.effects.splice(i, 1);
         }
-      } else {
+      } else if (e.kind === "boom") {
         e.flash.scale.setScalar(1 + e.t * 4);
         e.flash.material.opacity = 0.95 * Math.max(0, 1 - e.t);
         if (e.t >= 1) {
@@ -135,7 +185,25 @@ export class Gun {
           e.flash.material.dispose();
           this.effects.splice(i, 1);
         }
+      } else if (e.kind === "chunk") {
+        e.vel.y -= 14 * dt;
+        e.mesh.position.addScaledVector(e.vel, dt);
+        e.mesh.rotation.x += e.spin.x * dt;
+        e.mesh.rotation.y += e.spin.y * dt;
+        if (e.mesh.position.y < 0.08) {
+          e.mesh.position.y = 0.08;
+          e.vel.set(0, 0, 0);
+          e.spin.set(0, 0, 0);
+        }
+        e.mesh.material.opacity = Math.max(0, 1 - Math.max(0, e.t - 0.6) / 0.4);
+        if (e.t >= 1) {
+          this.scene.remove(e.mesh);
+          e.mesh.material.dispose();
+          this.effects.splice(i, 1);
+        }
       }
     }
+
+    this.smoke.update(dt);
   }
 }

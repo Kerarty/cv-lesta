@@ -12,6 +12,7 @@ export class CameraRig {
     this.pitch = this.targetPitch;
     this.distance = 13;
     this.shakeAmp = 0;
+    this.fovBoost = 0; // FOV-толчок при выстреле
     this._pos = new THREE.Vector3();
     this._look = new THREE.Vector3();
   }
@@ -23,6 +24,10 @@ export class CameraRig {
 
   shake(amp) {
     this.shakeAmp = Math.min(this.shakeAmp + amp, 0.6);
+  }
+
+  kick(deg) {
+    this.fovBoost = Math.min(this.fovBoost + deg, 6);
   }
 
   update(dt, targetPos) {
@@ -45,7 +50,7 @@ export class CameraRig {
     // указывает в собственный корпус, и снаряды летят себе под гусеницы
     const fx = Math.sin(this.yaw + Math.PI);
     const fz = Math.cos(this.yaw + Math.PI);
-    this._look.set(targetPos.x + fx * 26, 2.0, targetPos.z + fz * 26);
+    this._look.set(targetPos.x + fx * 18, 2.4, targetPos.z + fz * 18);
     this.camera.lookAt(this._look);
 
     if (this.shakeAmp > 0.001) {
@@ -53,6 +58,16 @@ export class CameraRig {
       this.camera.position.x += (Math.random() - 0.5) * s;
       this.camera.position.y += (Math.random() - 0.5) * s;
       this.shakeAmp *= Math.exp(-6 * dt);
+    }
+
+    // FOV-толчок: короткое «сжатие» картинки при выстреле
+    if (this.fovBoost > 0.01) {
+      this.camera.fov = 60 + this.fovBoost;
+      this.camera.updateProjectionMatrix();
+      this.fovBoost *= Math.exp(-7 * dt);
+    } else if (this.camera.fov !== 60) {
+      this.camera.fov = 60;
+      this.camera.updateProjectionMatrix();
     }
   }
 

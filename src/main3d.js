@@ -4,6 +4,7 @@ import { createWorld } from "./world3d.js";
 import { Tank } from "./tank3d.js";
 import { CameraRig } from "./camera3d.js";
 import { Gun } from "./shooting3d.js";
+import { Puffs } from "./effects3d.js";
 
 const canvas = document.getElementById("scene");
 const overlay = document.getElementById("lockOverlay");
@@ -15,10 +16,13 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87a7c4);
-scene.fog = new THREE.Fog(0x87a7c4, 70, 230);
+scene.background = new THREE.Color(0xd6e2ea);
+scene.fog = new THREE.Fog(0xd6e2ea, 90, 280);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 500);
 
@@ -105,6 +109,15 @@ addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
+// Пыль из-под гусениц на ходу
+const dust = new Puffs(scene, {
+  inner: "rgba(175,170,140,0.6)",
+  outer: "rgba(175,170,140,0)",
+});
+let dustTimer = 0;
+const dustOffset = new THREE.Vector3();
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
 // --- Игровой цикл ---
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
@@ -117,8 +130,20 @@ renderer.setAnimationLoop(() => {
 
   if (input.firing) gun.tryFire(now, camera, tank);
   gun.update(now, dt, targets);
-  updateReloadRing(now);
 
+  // Пыль: танк едет — гусеницы поднимают пыль
+  dustTimer -= dt;
+  if (Math.abs(tank.speed) > 3 && dustTimer <= 0) {
+    dustTimer = 0.09;
+    const side = Math.random() < 0.5 ? -1.3 : 1.3;
+    dustOffset.set(side, 0.25, -2.3).applyAxisAngle(Y_AXIS, tank.group.rotation.y);
+    dust.spawn(tank.group.position.clone().add(dustOffset), {
+      scale: 0.8, growth: 1.0, life: 0.8, rise: 0.6, opacity: 0.35, drift: 0.2,
+    });
+  }
+  dust.update(dt);
+
+  updateReloadRing(now);
   renderer.render(scene, camera);
 });
 
