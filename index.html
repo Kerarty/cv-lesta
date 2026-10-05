@@ -3,42 +3,81 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Резюме: В БОЙ!</title>
+  <title>Резюме: В БОЙ! 3D</title>
   <style>
     html, body {
       margin: 0;
       height: 100%;
       background: #1a1f16;
       overflow: hidden;
+      font-family: Consolas, "Courier New", monospace;
     }
-    #game {
-      width: 100vw;
-      height: 100vh;
+    #scene { display: block; width: 100vw; height: 100vh; }
+
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+    #crosshair .dot {
+      position: absolute; left: 50%; top: 50%;
+      width: 4px; height: 4px; margin: -2px 0 0 -2px;
+      background: #fff; border-radius: 50%; opacity: 0.9;
     }
-    .hint {
-      position: fixed;
-      bottom: 8px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      color: #8a9a78;
+    #hint {
+      position: fixed; bottom: 8px; left: 0; right: 0;
+      text-align: center; color: #8a9a78;
       font: 13px/1.4 Consolas, monospace;
-      pointer-events: none;
-      user-select: none;
+      pointer-events: none; user-select: none;
     }
+
+    #lockOverlay {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(14, 17, 12, 0.85);
+      cursor: pointer; user-select: none;
+    }
+    #lockOverlay.hidden { display: none; }
+    .lock-card { text-align: center; color: #d8e2c8; }
+    .lock-card h1 {
+      margin: 0 0 10px;
+      font-size: 44px; letter-spacing: 3px;
+      color: #ffd27a;
+    }
+    .lock-card p { margin: 4px 0; color: #a8b898; }
   </style>
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+  </script>
 </head>
 <body>
-  <div id="game"></div>
-  <p class="hint">WASD / стрелки — движение · мышь — башня · ЛКМ — огонь</p>
+  <canvas id="scene"></canvas>
 
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.87.0/dist/phaser.min.js"></script>
+  <div id="hud">
+    <div id="crosshair">
+      <svg id="reloadRing" width="56" height="56" viewBox="0 0 56 56">
+        <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="3"/>
+        <circle id="reloadArc" cx="28" cy="28" r="24" fill="none" stroke="#ffd27a" stroke-width="3"
+                stroke-linecap="round" transform="rotate(-90 28 28)"
+                stroke-dasharray="150.8" stroke-dashoffset="0"/>
+      </svg>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <p id="hint">W/S — ход · A/D — корпус · мышь — камера и башня · ЛКМ — огонь · Esc — пауза</p>
+
+  <div id="lockOverlay">
+    <div class="lock-card">
+      <h1>РЕЗЮМЕ: В БОЙ!</h1>
+      <p>Кликни, чтобы взять управление</p>
+      <p>WASD — движение · мышь — башня · ЛКМ — огонь</p>
+    </div>
+  </div>
+
+  <script>
+    // Ловим ошибки загрузки/инициализации для диагностики
+    window.__jsErrors = [];
+    addEventListener("error", (e) => window.__jsErrors.push(String(e.message)));
+  </script>
   <script src="src/config.js"></script>
   <script src="src/balance.js"></script>
-  <script src="src/objects/Tank.js"></script>
-  <script src="src/objects/Bullet.js"></script>
-  <script src="src/scenes/BootScene.js"></script>
-  <script src="src/scenes/BattleScene.js"></script>
-  <script src="src/main.js"></script>
+  <script type="module" src="src/main3d.js"></script>
 </body>
 </html>
