@@ -134,6 +134,16 @@ export function createWorld(scene) {
     scene.add(cloud);
   }
 
+  // --- Подложка за пределами карты: за границей — земля, а не пустота ---
+  const apron = new THREE.Mesh(
+    new THREE.PlaneGeometry(700, 700),
+    new THREE.MeshStandardMaterial({ color: 0x4f6840, roughness: 1 })
+  );
+  apron.rotation.x = -Math.PI / 2;
+  apron.position.y = -0.08;
+  apron.receiveShadow = true;
+  scene.add(apron);
+
   // --- Земля ---
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(W, D),
@@ -214,10 +224,10 @@ export function createWorld(scene) {
     colliders.push({ x, z, r: (type === "spruce" || type === "tree" ? 0.6 : 0.9) * s });
   }
 
-  // --- Лес-стена по периметру: закрывает «край мира» за границей карты ---
-  for (let i = 0; i < 150; i++) {
+  // --- Лес-стена по периметру: плотная полоса, скрывающая границу карты ---
+  for (let i = 0; i < 260; i++) {
     const side = Math.floor(rng() * 4);
-    const off = 8 + rng() * 16; // полоса за границей playable-зоны
+    const off = 5 + rng() * 22; // полоса за границей playable-зоны
     const along = (rng() - 0.5) * (Math.max(W, D) + 70);
     let x, z;
     if (side === 0)      { x = along; z = -D / 2 - off; }
