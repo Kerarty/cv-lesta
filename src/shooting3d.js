@@ -158,8 +158,13 @@ export class Gun {
         dead = true;
       } else {
         for (const tg of targets) {
+          // цель — вертикальный «столб»: горизонтальная дистанция до оси
+          // плюс высота полёта снаряда (кристалл висит над землёй)
+          const dx = p.x - tg.pos.x, dz = p.z - tg.pos.z;
+          const horiz = Math.hypot(dx, dz);
           const r = tg.radius + 0.25;
-          if (p.distanceToSquared(tg.pos) < r * r) {
+          const hTop = (tg.hitHeight ?? tg.radius * 2.4) + 0.4;
+          if (horiz < r && p.y < hTop) {
             this.explode(p, 1.3);
             this.rig.shake(0.25);
             if (tg.onHit) tg.onHit();
