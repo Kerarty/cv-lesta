@@ -178,14 +178,21 @@ export class Tank {
       if (o.name === "TrackMeshL" || o.name === "TrackMeshR") this._paint(o, 0x3a3a34);
     });
 
-    // Анимация гусениц: убираем из клипа каналы ствола (им управляет привод)
+    // Анимация гусениц: из клипа «Forward» делаем два действия — левая и правая
+    // колея, чтобы в повороте они крутились с разными скоростями (дифференциал)
     if (gltf.animations.length > 0) {
       const clip = THREE.AnimationClip.findByName(gltf.animations, "Forward") || gltf.animations[0];
-      clip.tracks = clip.tracks.filter((tr) => !/Tank_Gun/.test(tr.name));
       this.mixer = new THREE.AnimationMixer(model);
-      this.trackAction = this.mixer.clipAction(clip);
-      this.trackAction.timeScale = 0;
-      this.trackAction.play();
+      const mkSide = (side) => {
+        const c = clip.clone();
+        c.tracks = c.tracks.filter((tr) => new RegExp(`TankTrack\\d+${side}\\.`).test(tr.name));
+        const a = this.mixer.clipAction(c);
+        a.timeScale = 0;
+        a.play();
+        return a;
+      };
+      this.trackL = mkSide("L");
+      this.trackR = mkSide("R");
     }
 
     // Убираем процедурную заглушку
@@ -301,13 +308,19 @@ export class Tank {
       this.recoil *= Math.exp(-8 * dt);
     }
 
-    // Гусеницы крутятся в такт скорости: конвейер анимации ползёт на 0.55 м/с
-    // при timeScale=1 (1.4 юнита за цикл 0.79 с, масштаб модели ~0.31) — см. balance.js
-    if (this.mixer && this.trackAction) {
-      const target = Math.abs(this.speed) / BALANCE.tank.trackAnimSpeed;
-      this.trackAction.timeScale += (target - this.trackAction.timeScale) * Math.min(1, 10 * dt);
+    // Гусеницы-дифференциал (v0.12): колея = ход ± ω×полуколея.
+    // Внешняя в повороте быстрее, внутренняя медленнее, на нейтрали — врозь.
+    if (this.mixer && this.trackL && this.trackR) {
+      const half = BALANCE.tank.trackGauge / 2;
+      this._setTrack(this.trackL, this.speed + this.turnRate * half, dt);
+      this._setTrack(this.trackR, this.speed - this.turnRate * half, dt);
       this.mixer.update(dt);
     }
+  }
+
+  _setTrack(action, surfaceSpeed, dt) {
+    const target = surfaceSpeed / BALANCE.tank.trackAnimSpeed;
+    action.timeScale += (target - action.timeScale) * Math.min(1, 10 * dt);
   }
 
   // Вершинные цвета: тон примитива + шум «краски» + грязь у днища. UV в модели нет,
