@@ -4,6 +4,10 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
+// Метка сборки файла танка: выводится на экран рядом с версией баланса.
+// Если на экране нет этой метки — браузер держит старый tank3d.js из кэша.
+export const TANK_BUILD = "turret-fix-2";
+
 function shortestAngle(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
 }

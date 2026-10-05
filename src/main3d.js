@@ -1,7 +1,7 @@
 // Точка входа 3D-версии. Резюме: В БОЙ!
 import * as THREE from "three";
 import { createWorld } from "./world3d.js";
-import { Tank } from "./tank3d.js";
+import { Tank, TANK_BUILD } from "./tank3d.js";
 import { CameraRig } from "./camera3d.js";
 import { Gun } from "./shooting3d.js";
 import { Puffs } from "./effects3d.js";
@@ -158,9 +158,10 @@ function updateReloadRing(now) {
   reloadArc.style.stroke = remain > 0 ? "#ffd27a" : "#9be27a";
 }
 
-// Версия сборки на экране — чтобы точно знать, что браузер взял свежий код
-document.getElementById("ver").textContent = "сборка " + BALANCE.version;
-document.getElementById("verOverlay").textContent = "сборка " + BALANCE.version;
+// Версия сборки на экране — чтобы точно знать, что браузер взял свежий код.
+// TANK_BUILD живёт в самом tank3d.js: если метки нет — файл танка из кэша.
+document.getElementById("ver").textContent = `сборка ${BALANCE.version} · ${TANK_BUILD}`;
+document.getElementById("verOverlay").textContent = `сборка ${BALANCE.version} · ${TANK_BUILD}`;
 
 // Отладочный доступ: автотесты и воспроизведение багов
 window.__debug3d = { input, tank, rig, gun };
