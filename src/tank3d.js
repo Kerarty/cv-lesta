@@ -61,6 +61,9 @@ export class Tank {
     this.group.add(model);
     this.group.updateWorldMatrix(true, true);
 
+    let body = null;
+    model.traverse((o) => { if (o.name === "Tank_body") body = o; });
+
     // Узел ствола — единственная отдельно качающаяся часть модели.
     // Отцепляем его от скелета и сажаем на наш пивот привода, сохранив мировую позу.
     let gun = null;
@@ -72,6 +75,11 @@ export class Tank {
     this._turretZ0 = this.turret.position.z;
     this.turret.attach(gun);
 
+    // Купол башни (примитив Cube009) — на тот же привод: башня вращается вместе со стволом.
+    // Остальное верхнее строение в модели слито с корпусом и остаётся неподвижным.
+    const dome = body?.children.find((c) => c.name === "Cube009");
+    if (dome) this.turret.attach(dome);
+
     // Дуло — ребёнок узла ствола: кончик по геометрии, гарантированно едет с танком
     let gunMesh = null;
     gun.traverse((o) => { if (o.isMesh) gunMesh = o; });
@@ -79,6 +87,22 @@ export class Tank {
     const bb = gunMesh.geometry.boundingBox;
     this.muzzle.position.set(bb.min.x, 0, 0);
     gun.add(this.muzzle);
+
+    // Окраска: в GLB нет UV и текстур — красим вершинными цветами
+    // (тон примитива + пятна краски + грязь снизу корпуса)
+    const tints = {
+      Cube009: 0x7d8560,   // купол башни
+      Cube009_1: 0x6e7854, // корпус и верхнее строение
+      Cube009_2: 0x59644a, // надгусеничные полки, детали
+      Cube009_3: 0x4a5540,
+      Cube009_4: 0x3d4238,
+    };
+    for (const c of body.children) {
+      if (tints[c.name] !== undefined) this._paint(c, tints[c.name]);
+    }
+    model.traverse((o) => {
+      if (o.name === "TrackMeshL" || o.name === "TrackMeshR") this._paint(o, 0x3a3a34);
+    });
 
     // Анимация гусениц: убираем из клипа каналы ствола (им управляет привод)
     if (gltf.animations.length > 0) {
@@ -203,12 +227,38 @@ export class Tank {
       this.recoil *= Math.exp(-8 * dt);
     }
 
-    // Гусеницы крутятся со скоростью танка
+    // Гусеницы крутятся в такт скорости: конвейер анимации ползёт на 0.55 м/с
+    // при timeScale=1 (1.4 юнита за цикл 0.79 с, масштаб модели ~0.31) — см. balance.js
     if (this.mixer && this.trackAction) {
-      const target = Math.min(Math.abs(this.speed) / t.speedForward, 1.4);
+      const target = Math.abs(this.speed) / BALANCE.tank.trackAnimSpeed;
       this.trackAction.timeScale += (target - this.trackAction.timeScale) * Math.min(1, 10 * dt);
       this.mixer.update(dt);
     }
+  }
+
+  // Вершинные цвета: тон примитива + шум «краски» + грязь у днища. UV в модели нет,
+  // поэтому любая «текстура» делается только так.
+  _paint(mesh, tint) {
+    const geo = mesh.geometry;
+    const pos = geo.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    const c = new THREE.Color(tint);
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const n1 = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+      const f = 0.85 + 0.24 * (n1 - Math.floor(n1));
+      const dirt = THREE.MathUtils.clamp((y + 0.4) / 2.2, 0.55, 1);
+      colors[i * 3] = c.r * f * dirt;
+      colors[i * 3 + 1] = c.g * f * dirt;
+      colors[i * 3 + 2] = c.b * f * dirt;
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const m = mesh.material.clone();
+    m.color.setHex(0xffffff);
+    m.vertexColors = true;
+    m.metalness = 0.08;
+    m.roughness = 0.85;
+    mesh.material = m;
   }
 
   // desiredWorldYaw — направление взгляда камеры. Привод (v0.8) тяжёлый:
