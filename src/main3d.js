@@ -5,6 +5,7 @@ import { Tank, TANK_BUILD } from "./tank3d.js";
 import { CameraRig } from "./camera3d.js";
 import { Gun } from "./shooting3d.js";
 import { Puffs } from "./effects3d.js";
+import { ResumeTargets } from "./targets.js";
 
 const canvas = document.getElementById("scene");
 const overlay = document.getElementById("lockOverlay");
@@ -35,23 +36,109 @@ tank.attachModel("assets/models/Tank.glb").catch((err) =>
 const rig = new CameraRig(camera);
 const gun = new Gun(scene, rig);
 
-// Тестовая мишень; настоящие цели-секции резюме появятся в следующем блоке
-const targets = [];
-const dummy = new THREE.Mesh(
-  new THREE.CylinderGeometry(1.1, 1.1, 2.4, 10),
-  new THREE.MeshStandardMaterial({ color: 0xa04848, roughness: 0.9, flatShading: true })
-);
-dummy.position.set(25, 1.2, -18);
-dummy.castShadow = true;
-scene.add(dummy);
-targets.push({
-  pos: dummy.position,
-  radius: 1.2,
-  onHit: () => {
-    dummy.material.emissive.setHex(0xffffff);
-    setTimeout(() => dummy.material.emissive.setHex(0x000000), 120);
-  },
+// Цели-секции резюме: кристаллы с HP по балансу, штаб патрулирует
+const targetsMgr = new ResumeTargets(scene, camera);
+const targets = targetsMgr.items;
+
+// --- Прогресс боя: XP, счётчик секций, победа ---
+let xp = 0;
+let destroyed = 0;
+let battleStart = 0; // момент первого взятия управления
+const totalTargets = BALANCE.targets.length;
+const xpEl = document.getElementById("xp");
+const objEl = document.getElementById("objCounter");
+const feed = document.getElementById("killfeed");
+const cardEl = document.getElementById("card");
+const endScreen = document.getElementById("endScreen");
+
+function updateHud() {
+  xpEl.textContent = `Опыт: ${xp}`;
+  objEl.textContent = `Секции: ${destroyed}/${totalTargets}`;
+}
+
+function killFeed(html) {
+  const el = document.createElement("div");
+  el.className = "kf";
+  el.innerHTML = html;
+  feed.prepend(el);
+  while (feed.children.length > 4) feed.lastChild.remove();
+  setTimeout(() => el.remove(), 6000);
+}
+
+let cardTimer = 0;
+function showCard(id) {
+  const s = RESUME.sections[id];
+  if (!s) return;
+  document.getElementById("cardTitle").textContent = s.title;
+  document.getElementById("cardText").textContent = s.text;
+  cardEl.classList.add("show");
+  clearTimeout(cardTimer);
+  cardTimer = setTimeout(() => cardEl.classList.remove("show"), 14000);
+}
+document.getElementById("cardClose").addEventListener("click", () => {
+  clearTimeout(cardTimer);
+  cardEl.classList.remove("show");
 });
+
+function contactsHtml() {
+  const c = RESUME.contacts;
+  const row = (label, value, href) =>
+    value.includes("[ЗАПОЛНИТЬ")
+      ? `<div class="row"><span class="label">${label}</span>${value}</div>`
+      : `<div class="row"><span class="label">${label}</span><a href="${href}" target="_blank">${value}</a></div>`;
+  return (
+    row("Email", c.email, `mailto:${c.email}`) +
+    row("Telegram", c.telegram, `https://t.me/${c.telegram.replace("@", "")}`) +
+    row("GitHub", c.github, `https://${c.github}`) +
+    (c.phone && !c.phone.includes("[ЗАПОЛНИТЬ") ? row("Телефон", c.phone, `tel:${c.phone}`) : "")
+  );
+}
+
+function showEnd(mode) {
+  document.exitPointerLock?.();
+  input.firing = false;
+  const secs = battleStart ? Math.round((performance.now() - battleStart) / 1000) : 0;
+  const mm = Math.floor(secs / 60);
+  const ss = String(secs % 60).padStart(2, "0");
+  document.getElementById("endTitle").textContent = mode === "victory" ? "ПОБЕДА!" : "Контакты";
+  document.getElementById("endStats").textContent = mode === "victory"
+    ? `Винрейт 100% · Опыт +${xp} · Время боя ${mm}:${ss}`
+    : `Винрейт ещё не заработан · Опыт +${xp}`;
+  document.getElementById("endContacts").innerHTML = contactsHtml();
+  endScreen.classList.add("show");
+}
+document.getElementById("backBtn").addEventListener("click", () => {
+  endScreen.classList.remove("show");
+  overlay.classList.remove("hidden"); // пауза: клик — вернуться в бой
+});
+document.getElementById("contactsBtn").addEventListener("click", () => showEnd("contacts"));
+
+function applyDamage(t, dmg) {
+  if (t.dead) return;
+  t.hp -= dmg;
+  t.flash();
+  t.updateBar();
+  if (t.hp <= 0) destroyTarget(t);
+}
+
+function destroyTarget(t) {
+  t.dead = true;
+  gun.explode(t.pos.clone().setY(1.2), 1.7);
+  gun.smoke.spawn(t.pos.clone().setY(1.6), { scale: 2.2, growth: 2.4, life: 1.6, rise: 1.8, opacity: 0.6 });
+  rig.shake(0.4);
+  t.hide();
+  targets.splice(targets.indexOf(t), 1);
+  xp += t.xp;
+  destroyed++;
+  updateHud();
+  killFeed(`<b>${RESUME.nickname} [CV]</b> уничтожил секцию «${t.title}» <b>+${t.xp} XP</b>`);
+  showCard(t.id);
+  if (destroyed === totalTargets) setTimeout(() => showEnd("victory"), 900);
+}
+
+for (const t of targets) {
+  t.onHit = () => applyDamage(t, BALANCE.tank.damage);
+}
 
 // --- Ввод ---
 const input = { forward: false, backward: false, left: false, right: false, firing: false };
@@ -71,7 +158,8 @@ addEventListener("keyup", (e) => {
   if (k) input[k] = false;
 });
 addEventListener("mousedown", (e) => {
-  if (e.button === 0) input.firing = true;
+  // пока открыт стартовый экран/пауза — клики в интерфейс, а не выстрелы
+  if (e.button === 0 && overlay.classList.contains("hidden")) input.firing = true;
 });
 addEventListener("mouseup", (e) => {
   if (e.button === 0) input.firing = false;
@@ -98,6 +186,7 @@ function enableDragMode() {
   overlay.classList.add("hidden");
 }
 document.addEventListener("pointerlockchange", () => {
+  if (document.pointerLockElement && !battleStart) battleStart = performance.now();
   overlay.classList.toggle("hidden", !!document.pointerLockElement || dragMode);
 });
 addEventListener("keydown", (e) => {
@@ -134,6 +223,7 @@ renderer.setAnimationLoop(() => {
 
   if (input.firing) gun.tryFire(now, camera, tank);
   gun.update(now, dt, targets);
+  targetsMgr.update(dt, now / 1000);
 
   // Пыль: танк едет — гусеницы поднимают пыль
   dustTimer -= dt;
@@ -164,6 +254,6 @@ document.getElementById("ver").textContent = `сборка ${BALANCE.version} ·
 document.getElementById("verOverlay").textContent = `сборка ${BALANCE.version} · ${TANK_BUILD}`;
 
 // Отладочный доступ: автотесты и воспроизведение багов
-window.__debug3d = { input, tank, rig, gun };
+window.__debug3d = { input, tank, rig, gun, api: { damage: applyDamage, targets: () => targets } };
 // Сентинла для smoke-теста: страница успешно инициализировалась
 window.__boot3d = true;

@@ -43,6 +43,70 @@
     }
     .lock-card p { margin: 4px 0; color: #a8b898; }
     .lock-card .build { margin-top: 14px; color: #6d7a5f; font-size: 12px; }
+    .overlay-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 18px; }
+    .btn {
+      pointer-events: auto; cursor: pointer;
+      background: #3d4534; color: #ffd27a;
+      border: 1px solid #59644a; padding: 9px 16px;
+      font: 14px Consolas, monospace; text-decoration: none;
+    }
+    .btn:hover { background: #4a5540; }
+
+    /* HUD боя */
+    #xp {
+      position: fixed; top: 12px; left: 14px;
+      color: #ffd27a; font: bold 17px Consolas, monospace;
+      text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none;
+    }
+    #objCounter {
+      position: fixed; top: 36px; left: 14px;
+      color: #d8e2c8; font: 13px Consolas, monospace;
+      text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none;
+    }
+    #killfeed {
+      position: fixed; top: 12px; right: 14px;
+      display: flex; flex-direction: column; gap: 4px; align-items: flex-end;
+      pointer-events: none; max-width: 46vw;
+    }
+    .kf {
+      background: rgba(10, 12, 8, 0.72);
+      border: 1px solid #3d4534; border-radius: 3px;
+      color: #d8e2c8; padding: 4px 10px;
+      font: 13px Consolas, monospace;
+    }
+    .kf b { color: #ffd27a; font-weight: bold; }
+
+    /* Карточка секции резюме */
+    #card {
+      position: fixed; left: 16px; bottom: 56px; width: 350px;
+      background: rgba(16, 20, 13, 0.93);
+      border: 1px solid #59644a; border-left: 4px solid #ffd27a;
+      padding: 14px 16px; color: #e5ecda;
+      transform: translateY(24px); opacity: 0;
+      transition: transform 0.25s, opacity 0.25s;
+      z-index: 5;
+    }
+    #card.show { transform: none; opacity: 1; }
+    #card h3 { margin: 0 0 8px; color: #ffd27a; font: bold 17px Consolas, monospace; }
+    #card p { margin: 0 0 10px; font: 13px/1.55 Consolas, monospace; }
+    #card .btn { padding: 6px 12px; font-size: 13px; }
+
+    /* Экран победы / контакты */
+    #endScreen {
+      position: fixed; inset: 0; z-index: 20;
+      background: rgba(10, 13, 8, 0.92);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center;
+      color: #e5ecda; font-family: Consolas, monospace;
+    }
+    #endScreen.show { display: flex; }
+    #endTitle { font-size: 52px; letter-spacing: 4px; color: #ffd27a; margin: 0 0 8px; }
+    #endStats { font: 16px Consolas, monospace; color: #d8e2c8; margin-bottom: 22px; }
+    #endContacts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 26px; }
+    #endContacts .row { font: 15px Consolas, monospace; }
+    #endContacts .row span.label { color: #8a9a78; display: inline-block; width: 110px; text-align: right; margin-right: 12px; }
+    #endContacts a { color: #ffd27a; text-decoration: none; border-bottom: 1px dashed #6d5a2a; }
+    #endContacts a:hover { color: #ffe7ad; }
   </style>
   <script type="importmap">
   {
@@ -57,6 +121,9 @@
   <canvas id="scene"></canvas>
 
   <div id="hud">
+    <div id="xp">Опыт: 0</div>
+    <div id="objCounter">Секции: 0/6</div>
+    <div id="killfeed"></div>
     <div id="crosshair">
       <svg id="reloadRing" width="56" height="56" viewBox="0 0 56 56">
         <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="3"/>
@@ -65,6 +132,11 @@
                 stroke-dasharray="150.8" stroke-dashoffset="0"/>
       </svg>
       <div class="dot"></div>
+    </div>
+    <div id="card">
+      <h3 id="cardTitle"></h3>
+      <p id="cardText"></p>
+      <button id="cardClose" class="btn">Понятно</button>
     </div>
   </div>
   <p id="hint">W/S — ход · A/D — корпус · мышь — камера и башня · ЛКМ — огонь · Esc — пауза · <span id="ver"></span></p>
@@ -75,7 +147,22 @@
       <p>Кликни, чтобы взять управление</p>
       <p>WASD — движение · мышь — башня · ЛКМ — огонь</p>
       <p class="build" id="verOverlay"></p>
+      <div class="overlay-buttons">
+        <button class="btn" id="contactsBtn">Не люблю танки → Сразу контакты</button>
+        <a class="btn" id="pdfBtnOverlay" href="assets/resume.pdf" target="_blank">Скачать резюме (PDF)</a>
+      </div>
     </div>
+  </div>
+
+  <div id="endScreen">
+    <h1 id="endTitle">ПОБЕДА!</h1>
+    <div id="endStats"></div>
+    <div id="endContacts"></div>
+    <div class="overlay-buttons">
+      <a class="btn" href="assets/resume.pdf" target="_blank">Скачать резюме (PDF)</a>
+      <button class="btn" id="backBtn">Вернуться в бой</button>
+    </div>
+  </div>
   </div>
 
   <script>
