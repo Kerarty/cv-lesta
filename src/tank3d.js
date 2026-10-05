@@ -13,6 +13,7 @@ export class Tank {
     this.recoil = 0;
     this.speed = 0;      // м/с, текущая продольная скорость (со знаком)
     this.turnRate = 0;   // рад/с, текущая скорость разворота корпуса
+    this.turretRate = 0; // рад/с, текущая скорость привода башни
 
     const hullMat = new THREE.MeshStandardMaterial({ color: 0x5c6b46, roughness: 0.9, flatShading: true });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x4a5739, roughness: 1, flatShading: true });
@@ -133,12 +134,25 @@ export class Tank {
     }
   }
 
-  // desiredWorldYaw — направление взгляда камеры; привод башни ограничивает скорость доворота
+  // desiredWorldYaw — направление взгляда камеры. Привод башни (v0.8) тяжёлый:
+  // разгоняется плавно и начинает тормозить заранее, чтобы не проскочить цель.
   aimToward(desiredWorldYaw, dt) {
+    const t = BALANCE.tank;
     const currentWorld = this.group.rotation.y + this.turret.rotation.y;
     const err = shortestAngle(currentWorld, desiredWorldYaw);
-    const step = THREE.MathUtils.clamp(err, -BALANCE.tank.turretTraverse * dt, BALANCE.tank.turretTraverse * dt);
-    this.turret.rotation.y += step;
+
+    // Физичное торможение: скорость, при которой привод успеет остановиться на цели
+    const brakeRate = Math.sqrt(2 * t.traverseAccel * Math.abs(err));
+    const desiredRate = Math.sign(err) * Math.min(t.turretTraverse, brakeRate);
+
+    this.turretRate += THREE.MathUtils.clamp(
+      desiredRate - this.turretRate, -t.traverseAccel * dt, t.traverseAccel * dt
+    );
+    this.turret.rotation.y += this.turretRate * dt;
+  }
+
+  turretWorldYaw() {
+    return this.group.rotation.y + this.turret.rotation.y;
   }
 
   muzzleWorldPos(target) {
