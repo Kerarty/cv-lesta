@@ -158,6 +158,9 @@ function updateReloadRing(now) {
   reloadArc.style.stroke = remain > 0 ? "#ffd27a" : "#9be27a";
 }
 
+// Версия сборки на экране — чтобы точно знать, что браузер взял свежий код
+document.getElementById("ver").textContent = "сборка " + BALANCE.version;
+
 // Отладочный доступ: автотесты и воспроизведение багов
 window.__debug3d = { input, tank, rig, gun };
 // Сентинла для smoke-теста: страница успешно инициализировалась
