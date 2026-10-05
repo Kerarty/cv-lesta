@@ -20,8 +20,10 @@ function splitByHeight(geo, cutY) {
 
   for (let t = 0; t < triCount; t++) {
     const vis = [idx ? idx.getX(t * 3) : t * 3, idx ? idx.getX(t * 3 + 1) : t * 3 + 1, idx ? idx.getX(t * 3 + 2) : t * 3 + 2];
-    const isAbove = vis.every((vi) => pos.getY(vi) > cutY);
-    const T = isAbove ? above : below;
+    // по центроиду: стены башни начинаются на палубе, правило «все вершины выше»
+    // оставляло их корпусу — и вращался один ствол
+    const cy = (pos.getY(vis[0]) + pos.getY(vis[1]) + pos.getY(vis[2])) / 3;
+    const T = cy > cutY ? above : below;
     for (const vi of vis) {
       for (const [name, attr] of attrs) {
         const arr = T[name] || (T[name] = []);
