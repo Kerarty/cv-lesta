@@ -160,6 +160,7 @@ function updateReloadRing(now) {
 
 // Версия сборки на экране — чтобы точно знать, что браузер взял свежий код
 document.getElementById("ver").textContent = "сборка " + BALANCE.version;
+document.getElementById("verOverlay").textContent = "сборка " + BALANCE.version;
 
 // Отладочный доступ: автотесты и воспроизведение багов
 window.__debug3d = { input, tank, rig, gun };
