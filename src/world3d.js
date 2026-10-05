@@ -214,6 +214,45 @@ export function createWorld(scene) {
     colliders.push({ x, z, r: (type === "spruce" || type === "tree" ? 0.6 : 0.9) * s });
   }
 
+  // --- Лес-стена по периметру: закрывает «край мира» за границей карты ---
+  for (let i = 0; i < 150; i++) {
+    const side = Math.floor(rng() * 4);
+    const off = 8 + rng() * 16; // полоса за границей playable-зоны
+    const along = (rng() - 0.5) * (Math.max(W, D) + 70);
+    let x, z;
+    if (side === 0)      { x = along; z = -D / 2 - off; }
+    else if (side === 1) { x = along; z = D / 2 + off; }
+    else if (side === 2) { x = -W / 2 - off; z = along; }
+    else                 { x = W / 2 + off; z = along; }
+
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = 1.2;
+    const low = new THREE.Mesh(spruceGeoLow, spruceMats[Math.floor(rng() * spruceMats.length)]);
+    low.position.y = 2.6;
+    const top = new THREE.Mesh(spruceGeoTop, low.material);
+    top.position.y = 4.1;
+    trunk.castShadow = low.castShadow = top.castShadow = true;
+
+    const wallTree = new THREE.Group();
+    wallTree.add(trunk, low, top);
+    wallTree.position.set(x, 0, z);
+    wallTree.rotation.y = rng() * Math.PI * 2;
+    wallTree.scale.setScalar(1.0 + rng() * 1.1);
+    scene.add(wallTree);
+  }
+
+  // --- Холмы на горизонте: силуэты в дымке ---
+  const hillGeo = radialJitter(new THREE.IcosahedronGeometry(1, 1), 0.35);
+  const hillMat = new THREE.MeshStandardMaterial({ color: 0x5d7549, roughness: 1, flatShading: true });
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + rng() * 0.5;
+    const dist = 200 + rng() * 70;
+    const hill = new THREE.Mesh(hillGeo, hillMat);
+    hill.position.set(Math.cos(a) * dist, -8, Math.sin(a) * dist);
+    hill.scale.set(50 + rng() * 40, 16 + rng() * 14, 50 + rng() * 40);
+    scene.add(hill);
+  }
+
   // --- Трава: 450 кустиков одним InstancedMesh ---
   const tuftGeo = new THREE.ConeGeometry(0.05, 0.42, 4);
   const tuftMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
