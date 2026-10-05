@@ -12,6 +12,42 @@ function shortestAngle(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
 }
 
+// Режет геометрию по предикату над центроидами треугольников.
+// Переносит ВСЕ атрибуты вершин (позиции, нормали, skinIndex/skinWeight — без них
+// скиннинг упадёт), с сохранением исходных типов массивов.
+function splitByPred(geo, pred) {
+  const pos = geo.attributes.position;
+  const idx = geo.index;
+  const triCount = (idx ? idx.count : pos.count) / 3;
+  const attrs = Object.entries(geo.attributes);
+  const inPart = {}, rest = {};
+
+  for (let t = 0; t < triCount; t++) {
+    const vis = [idx ? idx.getX(t * 3) : t * 3, idx ? idx.getX(t * 3 + 1) : t * 3 + 1, idx ? idx.getX(t * 3 + 2) : t * 3 + 2];
+    const cx = (pos.getX(vis[0]) + pos.getX(vis[1]) + pos.getX(vis[2])) / 3;
+    const cy = (pos.getY(vis[0]) + pos.getY(vis[1]) + pos.getY(vis[2])) / 3;
+    const cz = (pos.getZ(vis[0]) + pos.getZ(vis[1]) + pos.getZ(vis[2])) / 3;
+    const T = pred(cx, cy, cz) ? inPart : rest;
+    for (const vi of vis) {
+      for (const [name, attr] of attrs) {
+        const arr = T[name] || (T[name] = []);
+        for (let k = 0; k < attr.itemSize; k++) arr.push(attr.array[vi * attr.itemSize + k]);
+      }
+    }
+  }
+  const make = (T) => {
+    if (!T.position) return null;
+    const g = new THREE.BufferGeometry();
+    for (const [name, arr] of Object.entries(T)) {
+      const src = geo.attributes[name];
+      g.setAttribute(name, new THREE.BufferAttribute(new src.array.constructor(arr), src.itemSize, src.normalized));
+    }
+    if (!g.attributes.normal) g.computeVertexNormals();
+    return g;
+  };
+  return { inPart: make(inPart), out: make(rest) };
+}
+
 export class Tank {
   constructor(scene) {
     this.group = new THREE.Group();
@@ -79,12 +115,41 @@ export class Tank {
     this._turretZ0 = this.turret.position.z;
     this.turret.attach(gun);
 
-    // Купол башни — на самом деле ВСЁ верхнее строение (14×4.2×9.9 юнитов).
-    // Оно уже вращается целиком вместе со стволом — никакой резки меша не нужно.
-    // (Попытка вырезать башню из корпуса порождала артефакт — тонкий «штырь»
-    // из случайных треугольников над палубой, висящий на приводе.)
-    const dome = body?.children.find((c) => c.name === "Cube009");
-    if (dome) this.turret.attach(dome);
+    // БАШНЯ собирается из кусков корпуса (в исходном меше она слита с ним):
+    // 1) башенная коробка — центральная зона прима Cube009_2;
+    // 2) крыша со штырём — верх прима Cube009_1.
+    // ВАЖНО: Cube009 — это центральный блок КОРПУСА, он остаётся на корпусе!
+    this._turretParts = [];
+    const addTurretPart = (src, geo) => {
+      if (!geo) return;
+      // кусок — SkinnedMesh со скелетом и bind-матрицами источника,
+      // иначе скинненный рендер-трансформ не совпадёт и кусок уедет
+      const part = new THREE.SkinnedMesh(geo, src.material);
+      part.skeleton = src.skeleton;
+      part.bindMatrix.copy(src.bindMatrix);
+      part.bindMatrixInverse.copy(src.bindMatrixInverse);
+      part.bindMode = src.bindMode;
+      part.castShadow = true;
+      part.frustumCulled = false;
+      part.matrixWorld.copy(src.matrixWorld);
+      this.turret.attach(part);
+      this._turretParts.push({ mesh: part, tintName: src.name });
+    };
+
+    const cuts = [
+      { name: "Cube009_2", pred: (cx, cy, cz) => cy > 2.4 && Math.abs(cx) < 3.7 && Math.abs(cz) < 3.7 },
+      { name: "Cube009_1", pred: (cx, cy, cz) => cy > 4.65 },
+    ];
+    for (const cut of cuts) {
+      const src = body?.children.find((c) => c.name === cut.name);
+      if (!src) continue;
+      const { inPart, out } = splitByPred(src.geometry, cut.pred);
+      addTurretPart(src, inPart);
+      if (out) {
+        src.geometry.dispose();
+        src.geometry = out;
+      }
+    }
 
     // Дуло — ребёнок узла ствола: кончик по геометрии, гарантированно едет с танком
     let gunMesh = null;
@@ -106,7 +171,9 @@ export class Tank {
     for (const c of body.children) {
       if (tints[c.name] !== undefined) this._paint(c, tints[c.name]);
     }
-    if (dome) this._paint(dome, tints.Cube009);
+    for (const p of this._turretParts) {
+      this._paint(p.mesh, tints[p.tintName] ?? tints.Cube009_1);
+    }
     model.traverse((o) => {
       if (o.name === "TrackMeshL" || o.name === "TrackMeshR") this._paint(o, 0x3a3a34);
     });
