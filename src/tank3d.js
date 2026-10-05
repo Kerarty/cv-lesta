@@ -10,6 +10,8 @@ export class Tank {
   constructor(scene) {
     this.group = new THREE.Group();
     this.recoil = 0;
+    this.speed = 0;      // м/с, текущая продольная скорость (со знаком)
+    this.turnRate = 0;   // рад/с, текущая скорость разворота корпуса
 
     const hullMat = new THREE.MeshStandardMaterial({ color: 0x5f6f4a, roughness: 0.9, flatShading: true });
     const trackMat = new THREE.MeshStandardMaterial({ color: 0x2f2f2a, roughness: 1 });
@@ -54,16 +56,31 @@ export class Tank {
     scene.add(this.group);
   }
 
+  // Танковая динамика с инерцией (v0.6): разгон, накат, торможение встречной передачей
   update(dt, input) {
     const fwd = (input.forward ? 1 : 0) - (input.backward ? 1 : 0);
     const turn = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     const t = BALANCE.tank;
 
-    this.group.rotation.y += turn * t.turnSpeed * dt;
+    // Продольная скорость
+    if (fwd > 0) {
+      this.speed += (this.speed < 0 ? t.accelBrake : t.accelForward) * dt;
+    } else if (fwd < 0) {
+      this.speed -= (this.speed > 0 ? t.accelBrake : t.accelBackward) * dt;
+    } else {
+      this.speed *= Math.exp(-t.rollDecay * dt); // накат
+      if (Math.abs(this.speed) < 0.05) this.speed = 0;
+    }
+    this.speed = THREE.MathUtils.clamp(this.speed, -t.speedBackward, t.speedForward);
 
-    const speed = fwd > 0 ? t.speedForward : fwd < 0 ? -t.speedBackward : 0;
+    // Разворот корпуса: борт выходит в поворот плавно
+    const turnTarget = turn * t.turnSpeed;
+    this.turnRate += THREE.MathUtils.clamp(turnTarget - this.turnRate, -t.turnAccel * dt, t.turnAccel * dt);
+
+    this.group.rotation.y += this.turnRate * dt;
+
     const dir = new THREE.Vector3(Math.sin(this.group.rotation.y), 0, Math.cos(this.group.rotation.y));
-    this.group.position.addScaledVector(dir, speed * dt);
+    this.group.position.addScaledVector(dir, this.speed * dt);
 
     // Границы мира
     const { width: W, depth: D } = BALANCE.world;

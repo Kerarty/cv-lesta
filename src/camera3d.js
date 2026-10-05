@@ -5,8 +5,11 @@ import * as THREE from "three";
 export class CameraRig {
   constructor(camera) {
     this.camera = camera;
-    this.yaw = Math.PI;    // стартуем за кормой (танк смотрит в +Z)
-    this.pitch = 0.42;     // рад, диапазон [0.12, 1.05]
+    // targetYaw/targetPitch — куда тянет мышь; yaw/pitch — сглаженные реальные значения
+    this.targetYaw = Math.PI;  // стартуем за кормой (танк смотрит в +Z)
+    this.targetPitch = 0.42;   // рад, диапазон [0.12, 1.05]
+    this.yaw = this.targetYaw;
+    this.pitch = this.targetPitch;
     this.distance = 13;
     this.shakeAmp = 0;
     this._pos = new THREE.Vector3();
@@ -14,8 +17,8 @@ export class CameraRig {
   }
 
   rotate(dx, dy) {
-    this.yaw -= dx * 0.0026;
-    this.pitch = THREE.MathUtils.clamp(this.pitch + dy * 0.0022, 0.12, 1.05);
+    this.targetYaw -= dx * 0.0026;
+    this.targetPitch = THREE.MathUtils.clamp(this.targetPitch + dy * 0.0022, 0.12, 1.05);
   }
 
   shake(amp) {
@@ -23,6 +26,11 @@ export class CameraRig {
   }
 
   update(dt, targetPos) {
+    // Камера догоняет мышь, а не повторяет её дёрганый след (экспоненциальное сглаживание)
+    const k = 1 - Math.exp(-13 * dt);
+    this.yaw += Math.atan2(Math.sin(this.targetYaw - this.yaw), Math.cos(this.targetYaw - this.yaw)) * k;
+    this.pitch += (this.targetPitch - this.pitch) * k;
+
     const hd = this.distance * Math.cos(this.pitch);
     const y = this.distance * Math.sin(this.pitch) + 1.6;
     this._pos.set(

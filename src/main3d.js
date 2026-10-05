@@ -129,5 +129,7 @@ function updateReloadRing(now) {
   reloadArc.style.stroke = remain > 0 ? "#ffd27a" : "#9be27a";
 }
 
+// Отладочный доступ: автотесты и воспроизведение багов
+window.__debug3d = { input, tank, rig, gun };
 // Сентинла для smoke-теста: страница успешно инициализировалась
 window.__boot3d = true;
