@@ -28,7 +28,12 @@ function radialJitter(geo, amt) {
   return geo;
 }
 
-function groundTexture(rng) {
+// Сторона полотна земли: 700 м, чтобы фон и локация были одной текстурой
+const GROUND_SIZE = 700;
+// Метр на текстуру земли: тайл 15×15 м, как было на 150×120
+const GROUND_TILE = 15;
+
+function groundTexture(rng, size) {
   const c = document.createElement("canvas");
   c.width = c.height = 512;
   const g = c.getContext("2d");
@@ -56,9 +61,10 @@ function groundTexture(rng) {
 
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(10, 8);
+  const tiles = size / GROUND_TILE; // один и тот же масштаб тайла по обеим осям
+  tex.repeat.set(tiles, tiles);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   return tex;
 }
 
@@ -71,21 +77,103 @@ function roadTexture() {
   const rng = mulberry32(90210);
   g.fillStyle = "#4a4d54";
   g.fillRect(0, 0, 128, 128);
+  // Заплатки и потёртости — асфальт не должен читаться как заливка
+  for (let i = 0; i < 6; i++) {
+    const x = rng() * 128, y = rng() * 128, r = 8 + rng() * 22;
+    g.fillStyle = `rgba(${rng() < 0.5 ? 62 : 92},${66},${72},0.16)`;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
   for (let i = 0; i < 1600; i++) {
     const v = 58 + Math.floor(rng() * 62);
     g.fillStyle = `rgba(${v},${v},${v + 6},0.22)`;
     g.fillRect(rng() * 128, rng() * 128, 2, 2);
   }
-  g.fillStyle = "rgba(212,206,176,0.5)";
-  g.fillRect(0, 5, 128, 3);
-  g.fillRect(0, 120, 128, 3);
-  g.fillStyle = "rgba(226,214,150,0.75)";
-  g.fillRect(0, 61, 64, 6); // осевая: 4 м штрих / 4 м пробел при тайле 8 м
+  // Колее прокрутки — две полосы вдоль дороги
+  g.fillStyle = "rgba(30,32,36,0.16)";
+  g.fillRect(0, 34, 128, 16);
+  g.fillRect(0, 78, 128, 16);
+  // Сплошные линии по краям полотна
+  g.fillStyle = "rgba(222,216,186,0.62)";
+  g.fillRect(0, 6, 128, 3);
+  g.fillRect(0, 119, 128, 3);
+  // Осевая: 4 м штрих / 4 м пробел при тайле 8 м
+  g.fillStyle = "rgba(230,216,150,0.8)";
+  g.fillRect(0, 61, 64, 6);
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   return tex;
+}
+
+// Обочина под полотном: гравий шире дороги, чтобы асфальт не «висел» в траве
+function shoulderTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const rng = mulberry32(13579);
+  g.fillStyle = "#6d6350";
+  g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 2600; i++) {
+    const v = 78 + Math.floor(rng() * 70);
+    g.fillStyle = `rgba(${v},${v - 6},${v - 22},0.4)`;
+    g.fillRect(rng() * 128, rng() * 128, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+// Лента по ломаной с митровым стыком на углу: дорога получается цельной,
+// без щелей и наложенных квадратов в повороте.
+function ribbon(path, halfW, y, uvScale, mat) {
+  const n = path.length;
+  const dirs = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = path[i + 1][0] - path[i][0];
+    const dz = path[i + 1][1] - path[i][1];
+    const l = Math.hypot(dx, dz) || 1;
+    dirs.push([dx / l, dz / l, l]);
+  }
+  const pos = [];
+  const uv = [];
+  const nrm = [];
+  const idx = [];
+  let dist = 0;
+  for (let i = 0; i < n; i++) {
+    const [x, z] = path[i];
+    let nx, nz, miter = 1;
+    const side = i === 0 ? dirs[0] : i === n - 1 ? dirs[n - 2] : null;
+    if (side) {
+      nx = -side[1]; nz = side[0];
+    } else {
+      // Угол: усредняем нормали соседних участков и растягиваем под угол стыка
+      const a = [-dirs[i - 1][1], dirs[i - 1][0]];
+      const b = [-dirs[i][1], dirs[i][0]];
+      const l = Math.hypot(a[0] + b[0], a[1] + b[1]) || 1;
+      nx = (a[0] + b[0]) / l; nz = (a[1] + b[1]) / l;
+      miter = 1 / Math.max(0.4, a[0] * nx + a[1] * nz);
+    }
+    pos.push(x + nx * halfW * miter, y, z + nz * halfW * miter);
+    pos.push(x - nx * halfW * miter, y, z - nz * halfW * miter);
+    nrm.push(0, 1, 0, 0, 1, 0); // полотно плоское — нормали задаём явно
+    uv.push(dist / uvScale, 0, dist / uvScale, 1);
+    if (i < n - 1) dist += dirs[i][2];
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const a = i * 2;
+    idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("normal", new THREE.Float32BufferAttribute(nrm, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 // Земля зоны мишеней: глина с колеёй и разбросанным песком
@@ -146,12 +234,14 @@ export function createWorld(scene) {
   const M = BALANCE.map;
   const rng = mulberry32(20261006);
 
-  // Зоны, свободные от декора: полотно дорог, ангар, зона мишеней.
+  // Зоны, свободные от декора: полотно дороги, ангар, зона мишеней.
   // Иначе дерево встаёт на дорогу, а куст — прямо в линию огня.
   function isReserved(x, z) {
-    const half = M.roadWidth / 2 + 1.6;
-    for (const r of M.roads) {
-      if (pointSegDist(x, z, r.ax, r.az, r.bx, r.bz) < half) return true;
+    const half = M.road.width / 2 + 2.4;
+    for (let i = 0; i < M.road.path.length - 1; i++) {
+      const [ax, az] = M.road.path[i];
+      const [bx, bz] = M.road.path[i + 1];
+      if (pointSegDist(x, z, ax, az, bx, bz) < half) return true;
     }
     const H = M.hangar;
     if (x > H.x0 - 3 && x < H.x1 + 3 && z > H.z0 - 3 && z < H.z1 + 3) return true;
@@ -229,24 +319,15 @@ export function createWorld(scene) {
     scene.add(cloud);
   }
 
-  // --- Подложка за пределами карты: за границей — земля, а не пустота ---
-  const apron = new THREE.Mesh(
-    new THREE.PlaneGeometry(700, 700),
-    new THREE.MeshStandardMaterial({ color: 0x4f6840, roughness: 1 })
-  );
-  apron.rotation.x = -Math.PI / 2;
-  apron.position.y = -0.08;
-  apron.receiveShadow = true;
-  scene.add(apron);
-
-  // --- Земля ---
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(W, D),
-    new THREE.MeshStandardMaterial({ map: groundTexture(rng), roughness: 1 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  // Земля: одно полотно 700×700. Раньше локация и подложка фона были двумя
+// плоскостями разного цвета — по краю карты шёл заметный шов.
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
+  new THREE.MeshStandardMaterial({ map: groundTexture(rng, GROUND_SIZE), roughness: 1 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
 
   // --- Материалы и геометрии декора ---
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4f2f, roughness: 1, flatShading: true });
@@ -273,28 +354,51 @@ export function createWorld(scene) {
   const bushGeo = radialJitter(new THREE.IcosahedronGeometry(0.65, 1), 0.4);
 
   // =======================================================================
-  // ДОРОГИ (синие на эскизе) — полотно 9 м с осевой разметкой
+  // ДОРОГА (v0.15) — одна: из ангара на запад, потом на юг вдоль зоны мишеней
   // =======================================================================
+  const RD = M.road;
   const roadBase = roadTexture();
-  const roadLen = (r) => Math.hypot(r.bx - r.ax, r.bz - r.az);
-  for (const r of M.roads) {
-    const len = roadLen(r);
-    const tex = roadBase.clone();
-    tex.needsUpdate = true;
-    tex.repeat.set(Math.max(1, Math.round(len / 8)), 1); // тайл = 8 м: 4 м штрих / 4 м пробел
-    // Поворот в XZ запекаем в геометрию: у Euler (x=-90°, y=θ) мировая ось
-    // наклоняется, и полотно встаёт вертикально. После bake — только поворот вокруг Y.
-    const geo = new THREE.PlaneGeometry(len, M.roadWidth);
-    geo.rotateX(-Math.PI / 2);
-    const road = new THREE.Mesh(
-      geo,
-      new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })
-    );
-    road.rotation.y = -Math.atan2(r.bz - r.az, r.bx - r.ax);
-    road.position.set((r.ax + r.bx) / 2, 0.03, (r.az + r.bz) / 2);
-    road.receiveShadow = true;
-    scene.add(road);
+  roadBase.repeat.set(1, 1);
+  scene.add(ribbon(RD.path, RD.width / 2 + 1.6, 0.015, 4, new THREE.MeshStandardMaterial({
+    map: shoulderTexture(), roughness: 1,
+  })));
+  const roadTex = roadBase.clone();
+  roadTex.needsUpdate = true;
+  roadTex.repeat.set(1, 1);
+  scene.add(ribbon(RD.path, RD.width / 2, 0.03, 8, new THREE.MeshStandardMaterial({
+    map: roadTex, roughness: 1,
+  })));
+
+  // Обочина и полотно одной лентой — на повороте митровый стык, шва не видно.
+
+  // Столбики-разметчики вдоль полотна: «здесь полигон»
+  const postGeo = new THREE.BoxGeometry(0.14, 1.0, 0.14);
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xe4e2d6, roughness: 0.9 });
+  const posts = [];
+  const _pm = new THREE.Matrix4();
+  const _pp = new THREE.Vector3();
+  const _pq = new THREE.Quaternion();
+  const _ps = new THREE.Vector3(1, 1, 1);
+  for (let i = 0; i < RD.path.length - 1; i++) {
+    const [ax, az] = RD.path[i];
+    const [bx, bz] = RD.path[i + 1];
+    const dx = bx - ax, dz = bz - az;
+    const len = Math.hypot(dx, dz);
+    const ux = dx / len, uz = dz / len;
+    const nx = -uz, nz = ux;
+    for (let d = 6; d < len; d += 13) {
+      for (const side of [-1, 1]) {
+        _pp.set(ax + ux * d + nx * side * (RD.width / 2 + 0.9), 0.5, az + uz * d + nz * side * (RD.width / 2 + 0.9));
+        posts.push(_pm.clone().compose(_pp, _pq, _ps));
+      }
+    }
   }
+  const postMesh = new THREE.InstancedMesh(postGeo, postMat, posts.length);
+  posts.forEach((m, i) => postMesh.setMatrixAt(i, m));
+  postMesh.instanceMatrix.needsUpdate = true;
+  postMesh.castShadow = true;
+  postMesh.frustumCulled = false;
+  scene.add(postMesh);
 
   // =======================================================================
   // ЗОНА МИШЕНЕЙ (красная на эскизе) — глина + бетонный бруствер с тыла
@@ -327,9 +431,9 @@ export function createWorld(scene) {
     scene.add(cap);
   }
 
-  // Метки дистанции от стрелковой линии (дорога A, x = −22) вдоль южного края зоны
+  // Метки дистанции от стрелковой линии вдоль южного края зоны
   for (const d of [10, 20, 30]) {
-    const x = M.roads[1].ax - d;
+    const x = M.road.lineX - d;
     const z = G.z1 + 3;
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.6, 0.22), concreteMat);
     post.position.set(x, 0.8, z);
@@ -559,15 +663,16 @@ export function createWorld(scene) {
   }
   instanced(bushGeo, bushMat, brushM);
 
-  // --- Холмы на горизонте: силуэты в дымке ---
+  // --- Холмы на горизонте: силуэты в дымке. Держим их мелкими и дальними —
+  // крупные близкие холмы при тумане 90–280 м читались бы как айсберг ---
   const hillGeo = radialJitter(new THREE.IcosahedronGeometry(1, 1), 0.35);
   const hillMat = new THREE.MeshStandardMaterial({ color: 0x5d7549, roughness: 1, flatShading: true });
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2 + rng() * 0.5;
-    const dist = 200 + rng() * 70;
+  for (let i = 0; i < 11; i++) {
+    const a = (i / 11) * Math.PI * 2 + rng() * 0.5;
+    const dist = 235 + rng() * 55;
     const hill = new THREE.Mesh(hillGeo, hillMat);
-    hill.position.set(Math.cos(a) * dist, -8, Math.sin(a) * dist);
-    hill.scale.set(50 + rng() * 40, 16 + rng() * 14, 50 + rng() * 40);
+    hill.position.set(Math.cos(a) * dist, -6, Math.sin(a) * dist);
+    hill.scale.set(32 + rng() * 26, 9 + rng() * 7, 32 + rng() * 26);
     scene.add(hill);
   }
 
