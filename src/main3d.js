@@ -305,11 +305,15 @@ renderer.setAnimationLoop(() => {
   clampCameraToHangar(camera);
   // Крыша прячется, когда камера поднимается над ней: иначе видно изнанку
   world.roof.visible = camera.position.y < BALANCE.map.hangar.roof - 0.4;
-  // Наведение: в режиме HR башня сама доворачивается на цель вблизи прицела
+  // Помощь прицелу (режим HR, v0.17): башню НЕ доворачиваем — она ведёт себя
+  // как в «Геймдизайнере», мышь решает. Помощь только в одном: если ствол уже
+  // сведён в пределах узкого конуса, точка выстрела берётся из центра кристалла —
+  // то есть выстрел «засчитывается», а башня остаётся на месте.
   let aimYaw = rig.facingYaw();
   let aimPoint = null;
   if (BALANCE.modes[mode].autoAim) {
-    let bestDiff = 0.9; // конус захвата ~50°
+    const cone = BALANCE.modes[mode].autoAimCone;
+    let bestDiff = cone;
     for (const t of targets) {
       const dx = t.pos.x - tank.group.position.x;
       const dz = t.pos.z - tank.group.position.z;
@@ -318,7 +322,6 @@ renderer.setAnimationLoop(() => {
       const diff = Math.atan2(Math.sin(yawToTarget - aimYaw), Math.cos(yawToTarget - aimYaw));
       if (Math.abs(diff) < bestDiff) {
         bestDiff = Math.abs(diff);
-        aimYaw = yawToTarget;
         aimPoint = t.pos.clone().setY(t.radius * 1.5);
       }
     }
