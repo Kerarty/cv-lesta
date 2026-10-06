@@ -31,7 +31,9 @@
     #lockOverlay {
       position: fixed; inset: 0; z-index: 10;
       display: flex; align-items: center; justify-content: center;
-      background: rgba(14, 17, 12, 0.85);
+      /* полупрозрачно: за панелью видно 3D-гараж со стоящим танком */
+      background: radial-gradient(ellipse at 50% 60%, rgba(14,17,12,0.35), rgba(10,13,8,0.82));
+      backdrop-filter: blur(1.5px);
       cursor: pointer; user-select: none;
     }
     #lockOverlay.hidden { display: none; }
@@ -47,13 +49,30 @@
     .mode-row { display: flex; gap: 8px; justify-content: center; margin: 10px 0; }
     .mode.active { background: #ffd27a; color: #1a1f16; border-color: #ffd27a; }
     #patchNotes {
-      width: 440px; max-height: 168px; overflow-y: auto;
+      width: 440px; max-height: 132px; overflow-y: auto;
       text-align: left; font: 11.5px/1.5 Consolas, monospace;
       color: #a8b898; background: rgba(10, 13, 8, 0.55);
       border: 1px solid #3d4534; padding: 8px 12px; margin: 12px 0;
     }
     .pn-row { margin-bottom: 7px; }
     .pn-row .pn-v { color: #ffd27a; font-weight: bold; }
+    /* Легенда ценности: цвет мишени = цена секции */
+    #legend {
+      display: flex; flex-wrap: wrap; gap: 5px 12px; justify-content: center;
+      width: 440px; margin: 0 0 4px;
+    }
+    #legend .lg {
+      display: flex; align-items: center; gap: 5px;
+      color: #a8b898; font: 11.5px Consolas, monospace;
+    }
+    #legend .lg i {
+      width: 10px; height: 10px; display: block;
+      border: 1px solid rgba(0, 0, 0, 0.5);
+    }
+    #legend .cap {
+      width: 100%; text-align: center; color: #6d7a5f;
+      font: 11px Consolas, monospace; margin-top: 2px;
+    }
     .btn.big { font-size: 20px; padding: 12px 64px; margin: 12px 0; }
     .lock-ctrl { color: #8a9a78; font-size: 13px; }
     .overlay-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 18px; }
@@ -163,12 +182,13 @@
         <button class="btn mode" data-mode="gd">Режим: Геймдизайнер</button>
       </div>
       <div id="patchNotes"></div>
+      <div id="legend"></div>
       <button class="btn big" id="battleBtn">В БОЙ!</button>
       <div class="overlay-buttons">
         <button class="btn" id="contactsBtn">Не люблю танки → Сразу контакты</button>
         <a class="btn" id="pdfBtnOverlay" href="assets/resume.pdf" target="_blank">Скачать резюме (PDF)</a>
       </div>
-      <p class="lock-ctrl">WASD — движение · мышь — башня · ЛКМ — огонь</p>
+      <p class="lock-ctrl">Старт — в гараже: W — выезд, мышь — башня, ЛКМ — огонь</p>
       <p class="build" id="verOverlay"></p>
     </div>
   </div>
@@ -180,9 +200,8 @@
     <p id="endSign" style="margin: 0 0 24px; color: #8a9a78; font-size: 14px;"></p>
     <div class="overlay-buttons">
       <a class="btn" href="assets/resume.pdf" target="_blank">Скачать резюме (PDF)</a>
-      <button class="btn" id="backBtn">Вернуться в бой</button>
+      <button class="btn" id="backBtn">Новый бой</button>
     </div>
-  </div>
   </div>
 
   <script>

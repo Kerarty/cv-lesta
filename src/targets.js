@@ -1,30 +1,24 @@
 // Цели-секции резюме: кристалл на базовом кольце, HP-бар, у движущегося штаба — патруль.
-// Данные (hp/xp/radius/id) берутся из BALANCE.targets, тексты и цвета — из RESUME.sections.
+// Данные (hp/xp/radius/color) и координаты — из BALANCE, тексты и заголовки — из RESUME.
 import * as THREE from "three";
-
-// Якоря расстановки: от ближней (дешёвой) к дальней (штаб) — маршрут по карте
-const ANCHORS = {
-  education: [24, -16],
-  about: [-28, 18],
-  skills: [50, -28],
-  projects: [-54, 36],
-  experience: [64, 20],
-  hq: [72, -46],
-};
 
 export class ResumeTargets {
   constructor(scene, camera) {
     this.camera = camera;
-    this.items = [];
+    this.all = [];   // все цели, включая уничтоженные (для «Нового боя»)
+    this.items = []; // живые цели: по ним считаем авто-наведение и попадания
     for (const def of BALANCE.targets) {
-      this.items.push(this.make(def, scene));
+      const t = this.make(def, scene);
+      this.all.push(t);
+      this.items.push(t);
     }
   }
 
   make(def, scene) {
     const cfg = RESUME.sections[def.id] || {};
-    const color = new THREE.Color(cfg.color ?? "#d9534f");
-    const anchor = ANCHORS[def.id] ?? [0, 0];
+    // Цвет мишени = её цена (рампа в balance.js). Заголовок секции — из контента.
+    const color = new THREE.Color(def.color ?? 0xd9534f);
+    const anchor = BALANCE.map.targets[def.id] ?? [0, 0];
 
     const group = new THREE.Group();
     group.position.set(anchor[0], 0, anchor[1]);
@@ -64,6 +58,15 @@ export class ResumeTargets {
     bar.position.y = def.radius * 1.5 + def.radius * 0.9 + 0.55;
     group.add(bar);
 
+    // Подпись дистанции: сколько метров до спавна — читаемо на полигоне
+    const dist = Math.round(Math.hypot(anchor[0] - BALANCE.map.spawn.x, anchor[1] - BALANCE.map.spawn.z));
+    const tag = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: this.tagTexture(`${dist} м · ${def.xp} XP`), depthWrite: false, transparent: true })
+    );
+    tag.scale.set(4.8, 1.2, 1);
+    tag.position.y = def.radius * 1.5 + def.radius * 0.9 + 2.1;
+    group.add(tag);
+
     scene.add(group);
 
     const t = {
@@ -93,20 +96,59 @@ export class ResumeTargets {
       hide() {
         group.visible = false;
       },
+      respawn() {
+        this.hp = this.maxHp;
+        this.dead = false;
+        this.group.visible = true;
+        this.group.position.set(this.anchor[0], 0, this.anchor[1]);
+        this.updateBar();
+      },
     };
     return t;
   }
 
+  // Табличка «64 м · 500 XP» над мишенью: дистанция и цена — как на полигоне
+  tagTexture(text) {
+    if (!this._tagCache) this._tagCache = new Map();
+    if (this._tagCache.has(text)) return this._tagCache.get(text);
+    const c = document.createElement("canvas");
+    c.width = 256; c.height = 64;
+    const g = c.getContext("2d");
+    g.fillStyle = "rgba(12,15,10,0.72)";
+    g.fillRect(0, 0, 256, 64);
+    g.strokeStyle = "rgba(255,210,122,0.55)";
+    g.lineWidth = 2;
+    g.strokeRect(1, 1, 254, 62);
+    g.fillStyle = "#ffd27a";
+    g.font = "bold 26px Consolas, monospace";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText(text, 128, 34);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this._tagCache.set(text, tex);
+    return tex;
+  }
+
+  // «Новый бой»: все цели живы и на местах, живые снова в items
+  reset() {
+    this.items.length = 0;
+    for (const t of this.all) {
+      t.respawn();
+      this.items.push(t);
+    }
+  }
+
   update(dt, time) {
-    for (const t of this.items) {
+    for (const t of this.all) {
       if (t.dead) continue;
       t.crystal.rotation.y += dt * 0.8;
       t.crystal.position.y = t.radius * 1.5 + Math.sin(time * 1.5 + t.phase) * 0.18;
       t.bar.quaternion.copy(this.camera.quaternion); // HP-бар всегда лицом к камере
       if (t.moving) {
-        // ШТАБ патрулирует вокруг якоря
-        t.group.position.x = t.anchor[0] + Math.cos(time * 0.22 + t.phase) * 7;
-        t.group.position.z = t.anchor[1] + Math.sin(time * 0.22 + t.phase) * 7;
+        // ШТАБ патрулирует внутри зоны мишеней — за бруствер не выходит
+        t.group.position.x = t.anchor[0] + Math.sin(time * 0.22 + t.phase) * 2.5;
+        t.group.position.z = t.anchor[1] + Math.cos(time * 0.16 + t.phase) * 5;
       }
     }
   }

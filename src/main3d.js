@@ -27,7 +27,7 @@ scene.fog = new THREE.Fog(0xd6e2ea, 90, 280);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 500);
 
-createWorld(scene);
+const world = createWorld(scene);
 const tank = new Tank(scene);
 // GLB-модель танка; при ошибке загрузки остаётся процедурная заглушка
 tank.attachModel("assets/models/Tank.glb").catch((err) =>
@@ -36,9 +36,15 @@ tank.attachModel("assets/models/Tank.glb").catch((err) =>
 const rig = new CameraRig(camera);
 const gun = new Gun(scene, rig);
 
-// Цели-секции резюме: кристаллы с HP по балансу, штаб патрулирует
+// Старт — в гараже: машина на разметке носом к выезду, камера за кормой
+tank.resetToSpawn();
+rig.resetToSpawn();
+
+// Цели-секции резюме: кристаллы с HP по балансу, штаб патрулирует в зоне
 const targetsMgr = new ResumeTargets(scene, camera);
 const targets = targetsMgr.items;
+const defById = Object.fromEntries(BALANCE.targets.map((d) => [d.id, d]));
+const hex = (c) => `#${c.toString(16).padStart(6, "0")}`;
 
 // --- Прогресс боя: XP, счётчик секций, победа ---
 let xp = 0;
@@ -73,6 +79,10 @@ let cardTimer = 0;
 function showCard(id) {
   const s = RESUME.sections[id];
   if (!s) return;
+  // Акцент карточки = цвет мишени = цена секции
+  const color = hex(defById[id]?.color ?? 0xffd27a);
+  cardEl.style.borderLeftColor = color;
+  document.getElementById("cardTitle").style.color = color;
   document.getElementById("cardTitle").textContent = s.title;
   document.getElementById("cardText").textContent = s.text;
   cardEl.classList.add("show");
@@ -116,16 +126,42 @@ function showEnd(mode_) {
     : RESUME.role;
   endScreen.classList.add("show");
 }
-document.getElementById("backBtn").addEventListener("click", () => {
-  endScreen.classList.remove("show");
-  overlay.classList.remove("hidden"); // пауза: клик — вернуться в бой
-});
+document.getElementById("backBtn").addEventListener("click", newBattle);
 document.getElementById("contactsBtn").addEventListener("click", () => showEnd("contacts"));
+
+// «Новый бой»: полный сброс сессии — цели на местах, счётчики в ноль,
+// танк снова на разметке в гараже. Без этого кнопка вела бы в пустую карту.
+function newBattle() {
+  endScreen.classList.remove("show");
+  xp = 0;
+  destroyed = 0;
+  shotsFired = 0;
+  shotsHit = 0;
+  damageDealt = 0;
+  battleStart = 0;
+  targetsMgr.reset();
+  for (const t of targets) t.onHit = () => applyDamage(t, BALANCE.tank.damage);
+  tank.resetToSpawn();
+  rig.resetToSpawn();
+  feed.innerHTML = "";
+  cardEl.classList.remove("show");
+  updateHud();
+  startBattle();
+}
 
 // Патч-ноты в ангаре: ченджлог баланса из balance.js
 document.getElementById("patchNotes").innerHTML = BALANCE.patchNotes
   .map((n) => `<div class="pn-row"><span class="pn-v">${n.v}</span> — ${n.text}</div>`)
   .join("");
+
+// Легенда ценности: цвет мишени = XP секции (рампа в balance.js)
+document.getElementById("legend").innerHTML =
+  BALANCE.targets
+    .map((d) => {
+      const title = RESUME.sections[d.id]?.title ?? d.id;
+      return `<span class="lg"><i style="background:${hex(d.color)}"></i>${title} · ${d.xp}</span>`;
+    })
+    .join("") + `<span class="cap">цвет мишени = ценность секции, дальше = дороже</span>`;
 
 // Режимы HR / Геймдизайнер: перезарядка и авто-наведение
 function setMode(m) {
@@ -203,6 +239,9 @@ addEventListener("mousemove", (e) => {
 let dragMode = false;
 function startBattle() {
   endScreen.classList.remove("show");
+  // Таймер боя стартует по кнопке, а не по захвату мыши: в drag-режиме
+  // (pointer lock запрещён) экран победы раньше показывал «Время боя 0:00».
+  if (!battleStart) battleStart = performance.now();
   try {
     const p = canvas.requestPointerLock();
     if (p && p.catch) p.catch(() => enableDragMode());
@@ -217,7 +256,6 @@ function enableDragMode() {
   overlay.classList.add("hidden");
 }
 document.addEventListener("pointerlockchange", () => {
-  if (document.pointerLockElement && !battleStart) battleStart = performance.now();
   overlay.classList.toggle("hidden", !!document.pointerLockElement || dragMode);
 });
 addEventListener("keydown", (e) => {
@@ -242,6 +280,20 @@ let dustTimer = 0;
 const dustOffset = new THREE.Vector3();
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
+// Камера не выходит сквозь стены ангара: пока она ниже крыши, держим её внутри бокса.
+// Иначе на спавне камера смотрит через заднюю стену, а игрок — в кирпич.
+function clampCameraToHangar(cam) {
+  const H = BALANCE.map.hangar;
+  const pad = 0.9;
+  if (cam.position.y > H.wall) return;
+  const near =
+    cam.position.x > H.x0 - pad && cam.position.x < H.x1 + pad &&
+    cam.position.z > H.z0 - pad && cam.position.z < H.z1 + pad;
+  if (!near) return;
+  cam.position.x = THREE.MathUtils.clamp(cam.position.x, H.x0 + pad, H.x1 - pad);
+  cam.position.z = THREE.MathUtils.clamp(cam.position.z, H.z0 + pad, H.z1 - pad);
+}
+
 // --- Игровой цикл ---
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
@@ -249,7 +301,12 @@ renderer.setAnimationLoop(() => {
   const now = performance.now();
 
   tank.update(dt, input);
-  rig.update(dt, tank.group.position);
+  // Пока открыта панель ангара — камера покачивается на месте, бой ещё не начался
+  const inGarage = !overlay.classList.contains("hidden") && !battleStart;
+  rig.update(dt, tank.group.position, inGarage);
+  clampCameraToHangar(camera);
+  // Крыша прячется, когда камера поднимается над ней: иначе видно изнанку
+  world.roof.visible = camera.position.y < BALANCE.map.hangar.roof - 0.4;
   // Наведение: в режиме HR башня сама доворачивается на цель вблизи прицела
   let aimYaw = rig.facingYaw();
   let aimPoint = null;
@@ -302,7 +359,9 @@ function updateReloadRing(now) {
 document.getElementById("ver").textContent = `сборка ${BALANCE.version} · ${TANK_BUILD}`;
 document.getElementById("verOverlay").textContent = `сборка ${BALANCE.version} · ${TANK_BUILD}`;
 
-// Отладочный доступ: автотесты и воспроизведение багов
-window.__debug3d = { input, tank, rig, gun, api: { damage: applyDamage, targets: () => targets } };
+// Отладочный доступ: автотесты и воспроизведение багов.
+// scene/camera/renderer — чтобы тесты могли отрендерить кадр вручную:
+// в невидимой вкладке rAF заморожен, а кадр снять надо.
+window.__debug3d = { input, tank, rig, gun, world, scene, camera, renderer, canvas, targetsMgr, api: { damage: applyDamage, targets: () => targets } };
 // Сентинла для smoke-теста: страница успешно инициализировалась
 window.__boot3d = true;

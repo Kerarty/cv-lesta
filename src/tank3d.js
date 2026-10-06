@@ -271,6 +271,20 @@ export class Tank {
     this.turret.add(base, dome, hatch, mg, stowage, mantlet, sleeve, tube, brake, antenna);
   }
 
+  // Спавн в гараре (v0.14): поставить машину на разметку носом к выезду.
+  // Используется на старте и при «Новом бое».
+  resetToSpawn() {
+    const s = BALANCE.map.spawn;
+    this.group.position.set(s.x, 0, s.z);
+    this.group.rotation.y = s.yaw;
+    this.speed = 0;
+    this.turnRate = 0;
+    this.turretRate = 0;
+    this.recoil = 0;
+    this.turret.rotation.y = 0;
+    this.turret.position.z = this._turretZ0;
+  }
+
   // Танковая динамика с инерцией (v0.7): тяжёлый разгон, накат, торможение встречной передачей
   update(dt, input) {
     const fwd = (input.forward ? 1 : 0) - (input.backward ? 1 : 0);
