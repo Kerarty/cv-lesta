@@ -6,11 +6,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Метка сборки файла танка: выводится на экран рядом с версией баланса.
 // Если на экране нет этой метки — браузер держит старый tank3d.js из кэша.
-export const TANK_BUILD = "turret-vol-2";
-
-function shortestAngle(from, to) {
-  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
-}
+export const TANK_BUILD = "turret-locked-1";
 
 // Режет геометрию по предикату над центроидами треугольников.
 // Переносит ВСЕ атрибуты вершин (позиции, нормали, skinIndex/skinWeight — без них
@@ -54,7 +50,6 @@ export class Tank {
     this.recoil = 0;
     this.speed = 0;      // м/с, текущая продольная скорость (со знаком)
     this.turnRate = 0;   // рад/с, текущая скорость разворота корпуса
-    this.turretRate = 0; // рад/с, текущая скорость привода
 
     // Пивот привода: в заглушке вращает башню целиком, в GLB — узел ствола
     this.turret = new THREE.Group();
@@ -293,9 +288,8 @@ export class Tank {
     this.group.rotation.y = s.yaw;
     this.speed = 0;
     this.turnRate = 0;
-    this.turretRate = 0;
     this.recoil = 0;
-    this.turret.rotation.y = 0;
+    this.turret.rotation.y = 0; // башня жёстко на корпусе (v0.20) — всегда нулевая
     this.turret.position.z = this._turretZ0;
   }
 
@@ -305,8 +299,14 @@ export class Tank {
     // Знак развёрнут: рост rotation.y уводит нос влево (левый борт = +X), поэтому
     // D должен давать отрицательный курс. Раньше A/D были перепутаны — на открытой
     // карте это не мешало, в гараже выезд без полного баранта становился невозможен.
-    const turn = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+    // v0.20: курс задают оба управления — A/D и мышь (input.steer, «руль» с
+    // самовыравниванием); башня жёстко на корпусе, своего привода не имеет.
     const t = BALANCE.tank;
+    // A/D и мышь складываются, но машина не может крутить быстрее turnSpeed:
+    // оба управления — два способа задать один и тот же курс, а не два поворота.
+    const turn = THREE.MathUtils.clamp(
+      (input.left ? 1 : 0) - (input.right ? 1 : 0) - input.steer, -1, 1
+    );
 
     // Продольная скорость
     if (fwd > 0) {
@@ -380,21 +380,9 @@ export class Tank {
     mesh.material = m;
   }
 
-  // desiredWorldYaw — направление взгляда камеры. Привод (v0.8) тяжёлый:
-  // разгоняется плавно и тормозит заранее, чтобы не проскочить цель.
-  aimToward(desiredWorldYaw, dt) {
-    const t = BALANCE.tank;
-    const currentWorld = this.group.rotation.y + this.turret.rotation.y;
-    const err = shortestAngle(currentWorld, desiredWorldYaw);
-
-    const brakeRate = Math.sqrt(2 * t.traverseAccel * Math.abs(err));
-    const desiredRate = Math.sign(err) * Math.min(t.turretTraverse, brakeRate);
-
-    this.turretRate += THREE.MathUtils.clamp(
-      desiredRate - this.turretRate, -t.traverseAccel * dt, t.traverseAccel * dt
-    );
-    this.turret.rotation.y += this.turretRate * dt;
-  }
+  // Привода башни больше нет (v0.20): turret.rotation.y всегда 0, башня и ствол
+  // жёстко на корпусе, наводится вся машина — курс задаёт мышь (input.steer)
+  // и A/D. turretWorldYaw() = курс машины = курс башни, оставлен для стрельбы.
 
   turretWorldYaw() {
     return this.group.rotation.y + this.turret.rotation.y;

@@ -28,9 +28,16 @@ export class CameraRig {
     this.camera.updateProjectionMatrix();
   }
 
-  rotate(dx, dy) {
-    this.targetYaw -= dx * 0.0026;
+  // v0.20: мышь больше не оборачивает камеру по азимуту — только по высоте.
+  // Азимут камеры следует за корпусом (followHull), горизонтальная мышь
+  // крутит саму машину. Так башня и ствол не доворачиваются отдельно.
+  rotate(dy) {
     this.targetPitch = THREE.MathUtils.clamp(this.targetPitch + dy * 0.0022, 0.12, 1.05);
+  }
+
+  // Камера встаёт за корму: смотрим туда, куда едет танк. Сглаживание — в update.
+  followHull(hullYaw) {
+    this.targetYaw = hullYaw - Math.PI;
   }
 
   shake(amp) {
@@ -100,8 +107,6 @@ export class CameraRig {
     }
   }
 
-  // Куда должен доворачиваться танк: направление взгляда камеры
-  facingYaw() {
-    return this.yaw + Math.PI;
-  }
+  // facingYaw() убран в v0.20: камера следует за корпусом, поэтому «куда смотрим»
+  // и «куда едем» — одно и то же направление, отдельного доворачивания не нужно.
 }

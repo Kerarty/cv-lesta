@@ -206,7 +206,8 @@ for (const t of targets) {
 }
 
 // --- Ввод ---
-const input = { forward: false, backward: false, left: false, right: false, firing: false };
+// steer — курс от горизонтальной мыши (−1…1), сам выравнивается в цикле (v0.20)
+const input = { forward: false, backward: false, left: false, right: false, firing: false, steer: 0 };
 const keyMap = {
   KeyW: "forward", ArrowUp: "forward",
   KeyS: "backward", ArrowDown: "backward",
@@ -229,9 +230,12 @@ addEventListener("mousedown", (e) => {
 addEventListener("mouseup", (e) => {
   if (e.button === 0) input.firing = false;
 });
+// Горизонтальная мышь — руль: v0.20 башня не доворачивается, машину крутит
+// и A/D, и мышь. Курс копится от движения и сам выравнивается в update.
 addEventListener("mousemove", (e) => {
   if (document.pointerLockElement || (dragMode && e.buttons & 1)) {
-    rig.rotate(e.movementX, e.movementY);
+    rig.rotate(e.movementY);
+    input.steer = THREE.MathUtils.clamp(input.steer + e.movementX * BALANCE.tank.steerGain, -1, 1);
   }
 });
 
@@ -304,14 +308,19 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   const now = performance.now();
 
+  // Горизонтальная мышь без движения мыши выравнивается сама (τ ≈ 0.2 с):
+  // «руль» сам возвращается в центр, машина перестаёт крутить.
+  input.steer *= Math.exp(-BALANCE.tank.steerReturn * dt);
   tank.update(dt, input);
+  // v0.20: камера следует за корпусом — видно, куда едет танк, башня не доворачивается.
+  rig.followHull(tank.group.rotation.y);
   rig.update(dt, tank.group.position);
   clampCameraToHangar(camera);
   // Помощь прицелу (режим HR, v0.17): башню НЕ доворачиваем — она ведёт себя
-  // как в «Геймдизайнере», мышь решает. Помощь только в одном: если ствол уже
-  // сведён в пределах узкого конуса, точка выстрела берётся из центра кристалла —
-  // то есть выстрел «засчитывается», а башня остаётся на месте.
-  let aimYaw = rig.facingYaw();
+  // как в «Геймдизайнере», машину крутит игрок. Помощь только в одном: если ствол
+  // уже сведён в пределах узкого конуса, точка выстрела берётся из центра кристалла —
+  // то есть выстрел «засчитывается», а корпус остаётся на месте.
+  let aimYaw = tank.turretWorldYaw();
   let aimPoint = null;
   if (BALANCE.modes[mode].autoAim) {
     const cone = BALANCE.modes[mode].autoAimCone;
@@ -328,7 +337,6 @@ renderer.setAnimationLoop(() => {
       }
     }
   }
-  tank.aimToward(aimYaw, dt);
 
   if (input.firing && gun.tryFire(now, camera, tank, aimPoint)) shotsFired++;
   gun.update(now, dt, targets);
