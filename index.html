@@ -48,14 +48,15 @@
     .lock-sub { color: #a8b898; margin: 2px 0 10px; }
     .mode-row { display: flex; gap: 8px; justify-content: center; margin: 10px 0; }
     .mode.active { background: #ffd27a; color: #1a1f16; border-color: #ffd27a; }
-    #patchNotes {
-      width: 440px; max-height: 132px; overflow-y: auto;
+    /* Описание выбранного режима: вместо ченджлога версий */
+    #modeDesc {
+      width: 440px;
       text-align: left; font: 11.5px/1.5 Consolas, monospace;
       color: #a8b898; background: rgba(10, 13, 8, 0.55);
-      border: 1px solid #3d4534; padding: 8px 12px; margin: 12px 0;
+      border: 1px solid #3d4534; border-left: 2px solid #ffd27a;
+      padding: 8px 12px; margin: 12px 0;
     }
-    .pn-row { margin-bottom: 7px; }
-    .pn-row .pn-v { color: #ffd27a; font-weight: bold; }
+    #modeDesc b { color: #ffd27a; }
     /* Легенда ценности: цвет мишени = цена секции */
     #legend {
       display: flex; flex-wrap: wrap; gap: 5px 12px; justify-content: center;
@@ -181,15 +182,14 @@
         <button class="btn mode active" data-mode="hr">Режим: HR</button>
         <button class="btn mode" data-mode="gd">Режим: Геймдизайнер</button>
       </div>
-      <div id="patchNotes"></div>
+      <div id="modeDesc"></div>
       <div id="legend"></div>
       <button class="btn big" id="battleBtn">В БОЙ!</button>
       <div class="overlay-buttons">
         <button class="btn" id="contactsBtn">Не люблю танки → Сразу контакты</button>
         <a class="btn" id="pdfBtnOverlay" href="assets/resume.pdf" target="_blank">Скачать резюме (PDF)</a>
       </div>
-      <p class="lock-ctrl">Старт — в гараже: W — выезд, мышь — башня, ЛКМ — огонь</p>
-      <p class="build" id="verOverlay"></p>
+      <p class="lock-ctrl">Старт — в гараже: W — выезд, A/D или мышь — разворот танка, ЛКМ — огонь</p>
     </div>
   </div>
 

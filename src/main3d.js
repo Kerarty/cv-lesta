@@ -149,10 +149,9 @@ function newBattle() {
   startBattle();
 }
 
-// Патч-ноты в ангаре: ченджлог баланса из balance.js
-document.getElementById("patchNotes").innerHTML = BALANCE.patchNotes
-  .map((n) => `<div class="pn-row"><span class="pn-v">${n.v}</span> — ${n.text}</div>`)
-  .join("");
+// Описание режима под кнопками: из balance.js, чтобы текст и числа рядом стояли.
+// Раньше здесь был ченджлог версий — он читался как лог, а не как мысль,
+// и съедал полэкрана до первого выстрела. Теперь один абзац: что меняет режим.
 
 // Легенда ценности: цвет мишени = XP секции (рампа в balance.js)
 document.getElementById("legend").innerHTML =
@@ -163,13 +162,18 @@ document.getElementById("legend").innerHTML =
     })
     .join("") + `<span class="cap">цвет мишени = ценность секции, дальше = дороже</span>`;
 
-// Режимы HR / Геймдизайнер: перезарядка и авто-наведение
+// Режимы HR / Геймдизайнер: перезарядка и помощь прицелу
 function setMode(m) {
   mode = m;
-  BALANCE.tank.reload = BALANCE.modes[m].reload;
+  const cfg = BALANCE.modes[m];
+  BALANCE.tank.reload = cfg.reload;
   document.querySelectorAll(".mode").forEach((b) =>
     b.classList.toggle("active", b.dataset.mode === m)
   );
+  document.getElementById("modeDesc").innerHTML =
+    `<b>${cfg.label}</b> — ${cfg.desc}<br>` +
+    `<span style="color:#6d7a5f">Всё остальное у режимов общее: одна карта, одна машина, ` +
+    `шесть целей, разворот ${Math.round(BALANCE.tank.turnSpeed * 180 / Math.PI)}°/с.</span>`;
 }
 document.querySelectorAll(".mode").forEach((b) =>
   b.addEventListener("click", () => setMode(b.dataset.mode))
@@ -365,10 +369,10 @@ function updateReloadRing(now) {
   reloadArc.style.stroke = remain > 0 ? "#ffd27a" : "#9be27a";
 }
 
-// Версия сборки на экране — чтобы точно знать, что браузер взял свежий код.
+// Метка сборки в бою — чтобы точно знать, что браузер взял свежий код.
 // TANK_BUILD живёт в самом tank3d.js: если метки нет — файл танка из кэша.
+// В меню метки нет намеренно: версии живут в коммитах, а не в интерфейсе.
 document.getElementById("ver").textContent = `сборка ${BALANCE.version} · ${TANK_BUILD}`;
-document.getElementById("verOverlay").textContent = `сборка ${BALANCE.version} · ${TANK_BUILD}`;
 
 // Отладочный доступ: автотесты и воспроизведение багов.
 // scene/camera/renderer — чтобы тесты могли отрендерить кадр вручную:

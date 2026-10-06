@@ -55,9 +55,9 @@ export class Gun {
     const aim = aimTarget ? this._aim.copy(aimTarget) : this.aimPoint(camera);
     const muzzle = tank.muzzleWorldPos(this._muzzle);
 
-    // Снаряд летит строго вдоль ствола (v0.8): горизонталь — привод башни,
-    // вертикаль — угол на точку прицела. Башня не довернулась — снаряд ушёл мимо,
-    // как в WoT: дождись сведения.
+    // Снаряд летит строго вдоль ствола: по горизонтали — курс машины, по вертикали —
+    // угол на точку прицела. Нос не доворачивали — снаряд ушёл мимо, как в WoT:
+    // дождись, пока машина встанет на цель.
     const yaw = tank.turretWorldYaw();
     const horizDist = Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z);
     const pitch = Math.atan2(aim.y - muzzle.y, horizDist);
