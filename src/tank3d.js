@@ -288,7 +288,10 @@ export class Tank {
   // Танковая динамика с инерцией (v0.7): тяжёлый разгон, накат, торможение встречной передачей
   update(dt, input) {
     const fwd = (input.forward ? 1 : 0) - (input.backward ? 1 : 0);
-    const turn = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    // Знак развёрнут: рост rotation.y уводит нос влево (левый борт = +X), поэтому
+    // D должен давать отрицательный курс. Раньше A/D были перепутаны — на открытой
+    // карте это не мешало, в гараже выезд без полного баранта становился невозможен.
+    const turn = (input.left ? 1 : 0) - (input.right ? 1 : 0);
     const t = BALANCE.tank;
 
     // Продольная скорость
@@ -322,12 +325,13 @@ export class Tank {
       this.recoil *= Math.exp(-8 * dt);
     }
 
-    // Гусеницы-дифференциал (v0.12): колея = ход ± ω×полуколея.
-    // Внешняя в повороте быстрее, внутренняя медленнее, на нейтрали — врозь.
+    // Гусеницы-дифференциал (v0.12): колея = ход ∓ ω×полуколея.
+    // В повороте внешняя колея проходит больший путь — значит быстрее.
+    // При turnRate > 0 (поворот влево) внешняя колея — правая.
     if (this.mixer && this.trackL && this.trackR) {
       const half = BALANCE.tank.trackGauge / 2;
-      this._setTrack(this.trackL, this.speed + this.turnRate * half, dt);
-      this._setTrack(this.trackR, this.speed - this.turnRate * half, dt);
+      this._setTrack(this.trackL, this.speed - this.turnRate * half, dt);
+      this._setTrack(this.trackR, this.speed + this.turnRate * half, dt);
       this.mixer.update(dt);
     }
   }
