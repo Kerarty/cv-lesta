@@ -1,0 +1,47 @@
+# Публикация на GitHub Pages: статика из корня репозитория.
+# Всё, что нужно для игры, уже в репозитории: index.html, src/, assets/.
+# Сборщика нет, поэтому шаг «собрать» пустой — Pages просто отдаёт файлы.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      # Собираем то, что реально нужно странице: без .git, workflow и черновиков.
+      # Сборщика нет — игра уже собрана в index.html + src/ + assets/.
+      - name: Собрать статику
+        run: |
+          mkdir -p _site
+          cp index.html LICENSE _site/
+          cp -r src assets _site/
+          rm -rf _site/src/*.tmp.js
+          echo "Содержимое _site:"
+          find _site -maxdepth 2 -not -path '*/models/*' | sort
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
