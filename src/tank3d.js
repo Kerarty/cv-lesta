@@ -6,7 +6,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Метка сборки файла танка: выводится на экран рядом с версией баланса.
 // Если на экране нет этой метки — браузер держит старый tank3d.js из кэша.
-export const TANK_BUILD = "turret-fix-2";
+export const TANK_BUILD = "turret-vol-1";
 
 function shortestAngle(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
@@ -115,11 +115,24 @@ export class Tank {
     this._turretZ0 = this.turret.position.z;
     this.turret.attach(gun);
 
-    // БАШНЯ собирается из кусков корпуса (в исходном меше она слита с ним):
-    // 1) башенная коробка — центральная зона прима Cube009_2;
-    // 2) крыша со штырём — верх прима Cube009_1.
-    // ВАЖНО: Cube009 — это центральный блок КОРПУСА, он остаётся на корпусе!
+    // БАШНЯ в модели слита с корпусом: Tank_body — это пять плит Cube009*, каждая во всю
+    // длину машины. Настоящей башни-узла в модели нет, поэтому собираем её сами:
+    // вырезаем общий объём башни (вокруг шарнира ствола, x≈−0.54, y≈3.9 в сырых
+    // единицах модели) из всех слоёв, которые этот объём задевают, и сажаем на привод.
+    // Важно: брать только верхний слой нельзя — он целиком лежит внутри корпуса, и
+    // башня получается невидимой (в v0.10–0.11 это и давало «штырь над башней»).
+    const TURRET = { x0: -3.4, x1: 2.6, z: 2.2, y: 3.0 };
+    const inTurret = (cx, cy, cz) =>
+      cx > TURRET.x0 && cx < TURRET.x1 && Math.abs(cz) < TURRET.z && cy > TURRET.y;
+
     this._turretParts = [];
+    // Позицию кусков переносим в пивот башни вручную: Object3D.attach() для объекта
+    // без родителя берёт только инверсию матрицы пивота и теряет масштаб модели,
+    // из-за чего башня улетала вбок втрое и на месте оставался только ствол.
+    this.turret.updateWorldMatrix(true, false);
+    const invTurret = new THREE.Matrix4().copy(this.turret.matrixWorld).invert();
+    const local = new THREE.Matrix4();
+
     const addTurretPart = (src, geo) => {
       if (!geo) return;
       // кусок — SkinnedMesh со скелетом и bind-матрицами источника,
@@ -131,19 +144,17 @@ export class Tank {
       part.bindMode = src.bindMode;
       part.castShadow = true;
       part.frustumCulled = false;
-      part.matrixWorld.copy(src.matrixWorld);
-      this.turret.attach(part);
+      src.updateWorldMatrix(true, false);
+      local.copy(src.matrixWorld).premultiply(invTurret);
+      local.decompose(part.position, part.quaternion, part.scale);
+      this.turret.add(part);
       this._turretParts.push({ mesh: part, tintName: src.name });
     };
 
-    const cuts = [
-      { name: "Cube009_2", pred: (cx, cy, cz) => cy > 2.4 && Math.abs(cx) < 3.7 && Math.abs(cz) < 3.7 },
-      { name: "Cube009_1", pred: (cx, cy, cz) => cy > 4.65 },
-    ];
-    for (const cut of cuts) {
-      const src = body?.children.find((c) => c.name === cut.name);
+    for (const name of ["Cube009", "Cube009_2", "Cube009_1"]) {
+      const src = body?.children.find((c) => c.name === name);
       if (!src) continue;
-      const { inPart, out } = splitByPred(src.geometry, cut.pred);
+      const { inPart, out } = splitByPred(src.geometry, inTurret);
       addTurretPart(src, inPart);
       if (out) {
         src.geometry.dispose();

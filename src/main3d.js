@@ -301,9 +301,7 @@ renderer.setAnimationLoop(() => {
   const now = performance.now();
 
   tank.update(dt, input);
-  // Пока открыта панель ангара — камера покачивается на месте, бой ещё не начался
-  const inGarage = !overlay.classList.contains("hidden") && !battleStart;
-  rig.update(dt, tank.group.position, inGarage);
+  rig.update(dt, tank.group.position);
   clampCameraToHangar(camera);
   // Крыша прячется, когда камера поднимается над ней: иначе видно изнанку
   world.roof.visible = camera.position.y < BALANCE.map.hangar.roof - 0.4;

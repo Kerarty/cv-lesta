@@ -13,14 +13,12 @@ export class CameraRig {
     this.distance = 13;
     this.shakeAmp = 0;
     this.fovBoost = 0; // FOV-толчок при выстреле
-    this.garageTime = 0;
     this._pos = new THREE.Vector3();
     this._look = new THREE.Vector3();
   }
 
   // Стартовая поза камеры: за кормой танка на спавне в гараре
   resetToSpawn() {
-    this.garageTime = 0;
     this.yaw = this.targetYaw = BALANCE.map.spawn.yaw - Math.PI;
     this.pitch = this.targetPitch = 0.42;
     this.shakeAmp = 0;
@@ -42,15 +40,7 @@ export class CameraRig {
     this.fovBoost = Math.min(this.fovBoost + deg, 6);
   }
 
-  update(dt, targetPos, inGarage = false) {
-    // Пока открыта панель ангара — камера мягко покачивается вокруг спавна,
-    // как в гараже танков: машина стоит, камера живёт.
-    if (inGarage) {
-      this.garageTime += dt;
-      this.targetYaw = BALANCE.map.spawn.yaw - Math.PI + Math.sin(this.garageTime * 0.28) * 0.55;
-      this.targetPitch = 0.34 + Math.sin(this.garageTime * 0.19) * 0.06;
-    }
-
+  update(dt, targetPos) {
     // Камера догоняет мышь, а не повторяет её дёрганый след (экспоненциальное сглаживание)
     const k = 1 - Math.exp(-13 * dt);
     this.yaw += Math.atan2(Math.sin(this.targetYaw - this.yaw), Math.cos(this.targetYaw - this.yaw)) * k;
