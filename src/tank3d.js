@@ -6,7 +6,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Метка сборки файла танка: выводится на экран рядом с версией баланса.
 // Если на экране нет этой метки — браузер держит старый tank3d.js из кэша.
-export const TANK_BUILD = "turret-vol-1";
+export const TANK_BUILD = "turret-vol-2";
 
 function shortestAngle(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
@@ -121,7 +121,10 @@ export class Tank {
     // единицах модели) из всех слоёв, которые этот объём задевают, и сажаем на привод.
     // Важно: брать только верхний слой нельзя — он целиком лежит внутри корпуса, и
     // башня получается невидимой (в v0.10–0.11 это и давало «штырь над башней»).
-    const TURRET = { x0: -3.4, x1: 2.6, z: 2.2, y: 3.0 };
+    // Объём башни снят с карты высот модели (max y в ячейке 0.5 по сырым координатам):
+    // масса башни лежит x −1.5…+3.0, |z| ≤ 2.5, верх 4.4…4.7, штырь 7.5 на (1.5, 1.5);
+    // палуба корпуса вокруг неё — 2.9…3.2. Шарнир ствола: (−0.54, 3.9).
+    const TURRET = { x0: -1.8, x1: 3.2, z: 2.7, y: 3.3 };
     const inTurret = (cx, cy, cz) =>
       cx > TURRET.x0 && cx < TURRET.x1 && Math.abs(cz) < TURRET.z && cy > TURRET.y;
 
