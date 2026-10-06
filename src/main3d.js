@@ -290,6 +290,10 @@ function clampCameraToHangar(cam) {
     cam.position.x > H.x0 - pad && cam.position.x < H.x1 + pad &&
     cam.position.z > H.z0 - pad && cam.position.z < H.z1 + pad;
   if (!near) return;
+  // В проёме ворот стен нет: не держим камеру внутри, когда она уже в выезде
+  const G = H.gate;
+  const inGate = cam.position.x < H.x0 + 1.2 && cam.position.z > G.z0 && cam.position.z < G.z1;
+  if (inGate) return;
   cam.position.x = THREE.MathUtils.clamp(cam.position.x, H.x0 + pad, H.x1 - pad);
   cam.position.z = THREE.MathUtils.clamp(cam.position.z, H.z0 + pad, H.z1 - pad);
 }
@@ -300,8 +304,13 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   const now = performance.now();
 
-  tank.update(dt, input);
-  rig.update(dt, tank.group.position);
+  const H = BALANCE.map.hangar;
+tank.update(dt, input);
+  // Пока танк в гараре — камера держится ниже перемычки, иначе на выезде
+  // она проходит сквозь верх ворот. На улице потолок снимается.
+  const tp = tank.group.position;
+  const inGarageZone = tp.x > H.x0 - 3 && tp.x < H.x1 + 8;
+  rig.update(dt, tp, inGarageZone ? H.gate.top - 1.0 : 0);
   clampCameraToHangar(camera);
   // Крыша прячется, когда камера поднимается над ней: иначе видно изнанку
   world.roof.visible = camera.position.y < BALANCE.map.hangar.roof - 0.4;

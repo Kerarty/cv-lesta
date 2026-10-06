@@ -13,6 +13,7 @@ export class CameraRig {
     this.distance = 13;
     this.shakeAmp = 0;
     this.fovBoost = 0; // FOV-толчок при выстреле
+    this._ceil = 0;     // текущий потолок камеры (0 — не ограничен)
     this._pos = new THREE.Vector3();
     this._look = new THREE.Vector3();
   }
@@ -40,14 +41,22 @@ export class CameraRig {
     this.fovBoost = Math.min(this.fovBoost + deg, 6);
   }
 
-  update(dt, targetPos) {
+  update(dt, targetPos, ceiling = 0) {
+    // Потолок для камеры (0 — открытое небо). В гараже это высота перемычки:
+    // камера плавно пригибается под неё, иначе на выезде упирается в верх ангара.
+    // Ограничение опускается плавно, а снимается мгновенно: если гасить его
+    // затуханием, камера на секунду проваливается почти к земле.
+    if (ceiling > 0.01) this._ceil += (ceiling - this._ceil) * (1 - Math.exp(-5 * dt));
+    else this._ceil = 0;
+
     // Камера догоняет мышь, а не повторяет её дёрганый след (экспоненциальное сглаживание)
     const k = 1 - Math.exp(-13 * dt);
     this.yaw += Math.atan2(Math.sin(this.targetYaw - this.yaw), Math.cos(this.targetYaw - this.yaw)) * k;
     this.pitch += (this.targetPitch - this.pitch) * k;
 
     const hd = this.distance * Math.cos(this.pitch);
-    const y = this.distance * Math.sin(this.pitch) + 1.6;
+    const naturalY = this.distance * Math.sin(this.pitch) + 1.6;
+    const y = this._ceil > 0.01 ? Math.min(naturalY, this._ceil) : naturalY;
     this._pos.set(
       targetPos.x + Math.sin(this.yaw) * hd,
       y,

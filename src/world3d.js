@@ -473,14 +473,22 @@ scene.add(ground);
   // Пол: плита утоплена в землю, верх на уровне грунта — танк не «висит»
   box(hangarW + wallT, 0.24, hangarD + wallT, cx, -0.1, cz, slabMat, false, true);
 
-  // Стены: восток, север, юг — целиком; запад — простенок между двумя выездами
+  // Стены: восток, север, юг — целиком. Запад — один выезд: короткие «щёки»
+  // по краям проёма и перемычка над воротами.
   box(wallT, H.wall, hangarD + wallT, H.x1, H.wall / 2, cz, wallMat);
   box(hangarW + wallT, H.wall, wallT, cx, H.wall / 2, H.z0, wallMat);
   box(hangarW + wallT, H.wall, wallT, cx, H.wall / 2, H.z1, wallMat);
-  box(wallT, H.wall, 5, H.x0, H.wall / 2, 1.5, wallMat); // простенок: z −1…4
+  const GT = H.gate;
+  const gateW = GT.z1 - GT.z0;
+  const cheekN = GT.z0 - H.z0;
+  const cheekS = H.z1 - GT.z1;
+  if (cheekN > 0) box(wallT, H.wall, cheekN, H.x0, H.wall / 2, H.z0 + cheekN / 2, wallMat);
+  if (cheekS > 0) box(wallT, H.wall, cheekS, H.x0, H.wall / 2, H.z1 - cheekS / 2, wallMat);
+  const headH = H.wall - GT.top;
+  box(wallT, headH, gateW + wallT, H.x0, GT.top + headH / 2, (GT.z0 + GT.z1) / 2, wallMat);
 
-  // Перемычка над выездами — ворота читаются как ворота
-  box(wallT, H.wall - 6.2, hangarD + wallT, H.x0, 6.2 + (H.wall - 6.2) / 2, cz, wallMat);
+  // Одна жёлтая балка над выездом — «здесь выезжают»
+  box(0.9, 0.5, gateW + 0.6, H.x0, GT.top - 0.35, (GT.z0 + GT.z1) / 2, yellowMat);
 
   // Крыша (прячется, когда камера поднимается выше — см. main3d)
   const roof = new THREE.Mesh(
@@ -491,10 +499,6 @@ scene.add(ground);
   roof.castShadow = true;
   roof.receiveShadow = true;
   hangarGroup.add(roof);
-
-  // Жёлтые балки над выездами: «сюда выезжают»
-  box(0.9, 0.5, 12.5, H.x0, 6.0, (H.z0 + -1) / 2, yellowMat);
-  box(0.9, 0.5, 11.5, H.x0, 6.0, (4 + H.z1) / 2, yellowMat);
 
   // Стропила под крышей — гараж читается объёмным, а не коробкой
   for (let i = 0; i < 4; i++) {
