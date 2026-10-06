@@ -304,16 +304,9 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   const now = performance.now();
 
-  const H = BALANCE.map.hangar;
-tank.update(dt, input);
-  // Пока танк в гараре — камера держится ниже перемычки, иначе на выезде
-  // она проходит сквозь верх ворот. На улице потолок снимается.
-  const tp = tank.group.position;
-  const inGarageZone = tp.x > H.x0 - 3 && tp.x < H.x1 + 8;
-  rig.update(dt, tp, inGarageZone ? H.gate.top - 1.0 : 0);
+  tank.update(dt, input);
+  rig.update(dt, tank.group.position);
   clampCameraToHangar(camera);
-  // Крыша прячется, когда камера поднимается над ней: иначе видно изнанку
-  world.roof.visible = camera.position.y < BALANCE.map.hangar.roof - 0.4;
   // Помощь прицелу (режим HR, v0.17): башню НЕ доворачиваем — она ведёт себя
   // как в «Геймдизайнере», мышь решает. Помощь только в одном: если ствол уже
   // сведён в пределах узкого конуса, точка выстрела берётся из центра кристалла —

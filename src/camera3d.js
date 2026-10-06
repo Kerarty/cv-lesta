@@ -41,14 +41,7 @@ export class CameraRig {
     this.fovBoost = Math.min(this.fovBoost + deg, 6);
   }
 
-  update(dt, targetPos, ceiling = 0) {
-    // Потолок для камеры (0 — открытое небо). В гараже это высота перемычки:
-    // камера плавно пригибается под неё, иначе на выезде упирается в верх ангара.
-    // Ограничение опускается плавно, а снимается мгновенно: если гасить его
-    // затуханием, камера на секунду проваливается почти к земле.
-    if (ceiling > 0.01) this._ceil += (ceiling - this._ceil) * (1 - Math.exp(-5 * dt));
-    else this._ceil = 0;
-
+  update(dt, targetPos) {
     // Камера догоняет мышь, а не повторяет её дёрганый след (экспоненциальное сглаживание)
     const k = 1 - Math.exp(-13 * dt);
     this.yaw += Math.atan2(Math.sin(this.targetYaw - this.yaw), Math.cos(this.targetYaw - this.yaw)) * k;
@@ -56,6 +49,23 @@ export class CameraRig {
 
     const hd = this.distance * Math.cos(this.pitch);
     const naturalY = this.distance * Math.sin(this.pitch) + 1.6;
+
+    // Потолок ангара: пока камера под его крышей, держим её ниже перемычки,
+    // иначе на выезде она проходит сквозь верх ворот. Считаем от прогнозной
+    // позиции камеры, а не от танка: танк может уже стоять снаружи,
+    // а камера всё ещё быть под крышей.
+    const H = BALANCE.map.hangar;
+    const camX = targetPos.x + Math.sin(this.yaw) * hd;
+    const camZ = targetPos.z + Math.cos(this.yaw) * hd;
+    const underRoof =
+      camX > H.x0 - 0.5 && camX < H.x1 + 0.5 &&
+      camZ > H.z0 - 0.5 && camZ < H.z1 + 0.5;
+    const ceiling = underRoof ? H.gate.top - 1.0 : 0;
+    // Ограничение опускается плавно, а снимается мгновенно: если гасить его
+    // затуханием, камера на секунду проваливается почти к земле.
+    if (ceiling > 0.01) this._ceil += (ceiling - this._ceil) * (1 - Math.exp(-5 * dt));
+    else this._ceil = 0;
+
     const y = this._ceil > 0.01 ? Math.min(naturalY, this._ceil) : naturalY;
     this._pos.set(
       targetPos.x + Math.sin(this.yaw) * hd,
