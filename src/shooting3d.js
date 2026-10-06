@@ -11,6 +11,9 @@ export class Gun {
     this.effects = [];
     this.scorches = [];
     this.reloadUntil = 0;
+    // На сколько метров мишень шире своей геометрии. Ставится из setMode():
+    // в HR прощаем ошибку мыши, в ГД целишься ровно. См. BALANCE.modes.*.hitPad.
+    this.hitPad = 0.25;
 
     // Трассер: вытянутая капсула, ориентированная по вектору скорости
     this.shellGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.85, 6);
@@ -164,7 +167,7 @@ export class Gun {
           // плюс высота полёта снаряда (кристалл висит над землёй)
           const dx = p.x - tg.pos.x, dz = p.z - tg.pos.z;
           const horiz = Math.hypot(dx, dz);
-          const r = tg.radius + 0.25;
+          const r = tg.radius + this.hitPad;
           const hTop = (tg.hitHeight ?? tg.radius * 2.4) + 0.4;
           if (horiz < r && p.y < hTop) {
             this.explode(p, 1.3);

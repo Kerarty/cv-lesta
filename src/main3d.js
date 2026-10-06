@@ -162,11 +162,12 @@ document.getElementById("legend").innerHTML =
     })
     .join("") + `<span class="cap">цвет мишени = ценность секции, дальше = дороже</span>`;
 
-// Режимы HR / Геймдизайнер: перезарядка и помощь прицелу
+// Режимы HR / Геймдизайнер: перезарядка, помощь прицелу и ширина мишени
 function setMode(m) {
   mode = m;
   const cfg = BALANCE.modes[m];
   BALANCE.tank.reload = cfg.reload;
+  gun.hitPad = cfg.hitPad;
   document.querySelectorAll(".mode").forEach((b) =>
     b.classList.toggle("active", b.dataset.mode === m)
   );
